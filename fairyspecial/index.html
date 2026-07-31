@@ -1,0 +1,539 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>FairySpecial</title>
+  <style>
+    body { margin:0; font-family:system-ui,Segoe UI,Helvetica,Arial; background:#000; color:#ccc; user-select:none; -webkit-user-select:none; }
+    #fullMap, #stitchedWrap, canvas { 
+      will-change: transform; 
+      backface-visibility: hidden; 
+      transform: translateZ(0); 
+    }
+    img { -webkit-user-drag:none; user-drag:none; }
+  </style>
+</head>
+<body>
+
+  <div id="fullMap" style="display:block; overflow:hidden; border:1px solid #222; position:fixed; left:0; top:0; right:0; bottom:0; background:#000;">
+    <div id="stitchedWrap" style="position:relative; display:block; transform-origin: 0 0;">
+      <img id="stitchedImg" src="static/map_stitched.png" alt="Full map" draggable="false" style="display:block; image-rendering:auto;" />
+      <canvas id="gridCanvas" style="position:absolute; left:0; top:0; pointer-events:none;"></canvas>
+    </div>
+    <div id="zoomControls" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:row; gap:0; z-index:100000; align-items:center;">
+      <button id="zoomOutBtn" title="Zoom out" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:none;border-radius:8px 0 0 8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">&minus;</button>
+      <button id="zoomInBtn" title="Zoom in" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:none;border-radius:0;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;">+</button>
+      <button id="identifyBtn" title="Identify chunk" style="width:32px;height:48px;font-size:16px;font-weight:bold;border:none;border-radius:0;background:rgba(30,30,30,0.85);color:#888;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;">🔍</button>
+      <button id="undergroundBtn" title="Show underground/instance fairy rings" style="height:48px;padding:0 16px;font-size:13px;font-weight:bold;border:none;border-radius:0 8px 8px 0;background:rgba(30,30,30,0.85);color:#4a9eff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;white-space:nowrap;">Show underground/instance fairy rings</button>
+    </div>
+  </div>
+
+  <!-- Underground / instance fairy rings popup -->
+  <div id="undergroundPopup" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:100001; align-items:center; justify-content:center;">
+    <div style="background:#151528; border:1px solid #4a9eff; border-radius:12px; padding:18px 20px; max-width:740px; width:92%; max-height:92vh; overflow-y:auto; position:relative; box-shadow:0 12px 50px rgba(0,0,0,0.7);">
+      <button id="undergroundPopupClose" title="Close" style="position:absolute; top:10px; right:12px; width:36px; height:36px; font-size:18px; font-weight:bold; border:none; border-radius:8px; background:rgba(255,255,255,0.08); color:#ccc; cursor:pointer;">✕</button>
+      <h2 style="margin:0 0 14px; color:#e8e8e8; font-size:32px; font-weight:bold; text-align:center; font-family:system-ui,Segoe UI,Arial;">Underground / Instance fairy rings</h2>
+      <div id="undergroundPopupGrid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px;"></div>
+    </div>
+  </div>
+
+  <script src="static/index.js?v=2"></script>
+  <script>
+    const stitched = document.getElementById('stitchedImg');
+    const fullMap = document.getElementById('fullMap');
+    const stitchedWrap = document.getElementById('stitchedWrap');
+    const canvas = document.getElementById('gridCanvas');
+
+    let manifest = null;
+    let currentScale = 1, currentTX = 0, currentTY = 0;
+    let baseTileW = 256, baseTileH = 256;
+    let minScale = 0.3, maxScale = 6;
+
+    const DEFAULT_GRID_NUDGE = { x: 0, y: -120 };
+    const DEFAULT_ROW_SCALE_PERCENT = 97;
+    const DEFAULT_CENTER_ROW = 15;
+    const DEFAULT_CENTER_COL = 23;
+    const UNDERGROUND_PAD = 0; // underground row removed — replaced by the popup button
+
+    function setupCanvas() {
+      if (!stitched || !stitched.naturalWidth) return;
+      if (!manifest || !Array.isArray(manifest.chunks) || manifest.chunks.length === 0) return;
+      try { canvas.width = stitched.naturalWidth; canvas.height = stitched.naturalHeight + UNDERGROUND_PAD; } catch(e) {}
+      try { canvas.style.width = stitched.naturalWidth + 'px'; canvas.style.height = (stitched.naturalHeight + UNDERGROUND_PAD) + 'px'; } catch(e) {}
+      try { const first = manifest.chunks[0]; if (first) { baseTileW = first.bbox[2] - first.bbox[0]; baseTileH = first.bbox[3] - first.bbox[1]; } } catch(e) {}
+      try { if (stitched) { stitched.style.display = 'block'; stitched.style.opacity = '1'; } } catch(e) {}
+
+      try {
+        window._gridInfo = { colLefts: [], colWidths: [], rowTops: [], rowHeights: [] };
+        const gi = window._gridInfo;
+        for (let c = 0; c < manifest.cols; c++) {
+          const chunk = manifest.chunks.find(ch => ch.row === 0 && ch.col === c);
+          if (chunk) { gi.colLefts.push(chunk.bbox[0]); gi.colWidths.push(chunk.bbox[2] - chunk.bbox[0]); }
+          else { gi.colLefts.push(c * baseTileW); gi.colWidths.push(baseTileW); }
+        }
+        for (let r = 0; r < manifest.rows; r++) {
+          const chunk = manifest.chunks.find(ch => ch.col === 0 && ch.row === r);
+          if (chunk) { gi.rowTops.push(chunk.bbox[1]); gi.rowHeights.push(chunk.bbox[3] - chunk.bbox[1]); }
+          else { gi.rowTops.push(r * baseTileH); gi.rowHeights.push(baseTileH); }
+        }
+        try {
+          const scale = DEFAULT_ROW_SCALE_PERCENT / 100.0;
+          if (Math.abs(scale - 1.0) > 1e-6) {
+            const newHeights = gi.rowHeights.map(h => Math.max(1, Math.round(h * scale)));
+            const firstTop = gi.rowTops[0] || 0;
+            gi.rowHeights = newHeights;
+            gi.rowTops = [];
+            let acc = firstTop;
+            for (let r = 0; r < newHeights.length; r++) { gi.rowTops.push(acc); acc += newHeights[r]; }
+          }
+        } catch(e) {}
+        try {
+          let nudgeX = DEFAULT_GRID_NUDGE.x, nudgeY = DEFAULT_GRID_NUDGE.y;
+          if (nudgeX !== 0) for (let i = 0; i < gi.colLefts.length; i++) gi.colLefts[i] += nudgeX;
+          if (nudgeY !== 0) for (let i = 0; i < gi.rowTops.length; i++) gi.rowTops[i] += nudgeY;
+          if (gi.colLefts.length > 0 && gi.colLefts[0] < 0) { const corr = -Math.round(gi.colLefts[0]); for (let i = 0; i < gi.colLefts.length; i++) gi.colLefts[i] += corr; }
+          if (gi.rowTops.length > 0 && gi.rowTops[0] < 0) { const corr = -Math.round(gi.rowTops[0]); for (let i = 0; i < gi.rowTops.length; i++) gi.rowTops[i] += corr; }
+        } catch(e) {}
+      } catch(e) { window._gridInfo = null; }
+    }
+
+    function applyTransform() {
+      if (!stitchedWrap) return;
+      stitchedWrap.style.transform = `translate(${currentTX}px, ${currentTY}px) scale(${currentScale})`;
+      stitchedWrap.style.transformOrigin = '0 0';
+      // NOTE: The canvas content is static and moves along with the wrapper transform,
+      // so we deliberately do NOT redraw the grid here. Redrawing the 11776x8276 canvas
+      // on every mousemove caused the heavy lag while dragging/zooming.
+    }
+
+    function drawGrid() {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const gi = window._gridInfo;
+      if (!gi || !manifest) return;
+      
+      // Draw gray overlay on non-fairy-ring chunks
+      drawGrayOverlay(ctx, gi);
+      
+      const gridBottom = gi.rowTops[gi.rowTops.length - 1] + gi.rowHeights[gi.rowHeights.length - 1];
+      
+      // Default chunk grid: black, slightly thicker than before
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.lineWidth = 3;
+      // Row lines
+      for (let r = 0; r <= manifest.rows; r++) {
+        const y = r < gi.rowTops.length ? gi.rowTops[r] : (gi.rowTops[gi.rowTops.length - 1] + gi.rowHeights[gi.rowHeights.length - 1]);
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+      // Column lines - stop at grid bottom
+      for (let c = 0; c <= manifest.cols; c++) {
+        const x = c < gi.colLefts.length ? gi.colLefts[c] : (gi.colLefts[gi.colLefts.length - 1] + gi.colWidths[gi.colWidths.length - 1]);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, gridBottom); ctx.stroke();
+      }
+      // Green border around every chunk that contains a fairy ring (slightly thicker than the grid)
+      ctx.strokeStyle = 'rgba(46,204,113,1)';
+      ctx.lineWidth = 4.5;
+      for (const key of Object.keys(FAIRY_CHUNKS)) {
+        const [r, c] = key.split(',').map(Number);
+        if (r >= gi.rowTops.length || c >= gi.colLefts.length) continue;
+        ctx.strokeRect(gi.colLefts[c], gi.rowTops[r], gi.colWidths[c], gi.rowHeights[r]);
+      }
+      drawFairyRingChunkLabels(ctx, gi);
+      // Underground row removed — replaced by the "Show underground/instance fairy rings" popup button
+    }
+
+    // Gray overlay for non-fairy-ring chunks
+    function drawGrayOverlay(ctx, gi) {
+      if (!gi || !manifest) return;
+      const fairySet = new Set(Object.keys(FAIRY_CHUNKS));
+      for (let r = 0; r < manifest.rows; r++) {
+        for (let c = 0; c < manifest.cols; c++) {
+          if (fairySet.has(`${r},${c}`)) continue;
+          const x = gi.colLefts[c];
+          const y = gi.rowTops[r];
+          const w = gi.colWidths[c];
+          const h = gi.rowHeights[r];
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fillRect(x, y, w, h);
+        }
+      }
+    }
+
+    // Underground row with proper boxes and Fairy Resistance Hideout
+    const UNDERGROUND_RINGS = [
+      'ALR','BKS','BLP','DIP','DLP','AJQ','BJR','BKQ','CKP','DIQ','DIR','DLS','BLQ'
+    ];
+
+    function drawUndergroundRow(ctx, gi) {
+      if (!gi || !manifest) return;
+      const cols = manifest.cols;
+      const colW = gi.colLefts.length > 0 ? gi.colWidths[0] : baseTileW;
+      const chunkH = gi.rowHeights.length > 0 ? gi.rowHeights[0] : baseTileH;
+      const gridBottom = gi.rowTops[gi.rowTops.length - 1] + gi.rowHeights[gi.rowHeights.length - 1];
+      const sepY = gridBottom + 4;
+      const titleGap = 55; // space between title and boxes (~5cm on screen)
+      const topY = sepY + 24 + titleGap;
+      const boxH = chunkH;
+      
+      // Background
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, sepY - 2, canvas.width, UNDERGROUND_PAD);
+      
+      // Gray separator bar
+      ctx.fillStyle = '#555';
+      ctx.fillRect(0, sepY, canvas.width, 3);
+      
+      // Title
+      ctx.fillStyle = '#ccc';
+      ctx.font = 'bold 24px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('Underground / Instance fairy rings', 10, sepY + 20);
+      
+      const allRings = UNDERGROUND_RINGS.map(code => ({ type: 'ring', code, color: '#4a9eff' }));
+      // Fairy Resistance Hideout is first box
+      const bw = colW - 6;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // === Fairy Resistance Hideout (first box) ===
+      {
+        const cx = gi.colLefts[0] + gi.colWidths[0] / 2;
+        const bx = cx - bw/2;
+        const by = topY;
+        
+        ctx.fillStyle = '#111';
+        roundRect(ctx, bx, by, bw, boxH, 6);
+        ctx.fill();
+        ctx.strokeStyle = '#4a9eff';
+        ctx.lineWidth = 2;
+        roundRect(ctx, bx, by, bw, boxH, 6);
+        ctx.stroke();
+        
+        // 4 codes stacked vertically with clear down arrows (solid triangles)
+        const codes = ['AIR','DLR','DJQ','AJS'];
+        // Fit all 4 codes + 3 arrows inside the box by capping font size on BOTH width and height
+        const lineFactor = 1.15;     // vertical step per code line
+        const arrowSlotFactor = 0.5; // vertical slot reserved per arrow
+        const maxFontByHeight = boxH / (codes.length * lineFactor + (codes.length - 1) * arrowSlotFactor);
+        const fontSize = Math.max(11, Math.min(bw * 0.22, maxFontByHeight * 0.94));
+        ctx.font = `bold ${fontSize}px Arial`;
+        const lineH = fontSize * lineFactor;
+        const arrowSlot = fontSize * arrowSlotFactor;
+        const totalH = codes.length * lineH + (codes.length - 1) * arrowSlot;
+        let cy = by + (boxH - totalH) / 2 + lineH / 2;
+        
+        ctx.fillStyle = '#00e5ff';
+        for (let j = 0; j < codes.length; j++) {
+          ctx.fillText(codes[j], cx, cy);
+          if (j < codes.length - 1) {
+            // Solid downward triangle, centered in the slot between two codes
+            const triH = fontSize * 0.32;
+            const triW = fontSize * 0.52;
+            const triY = cy + (lineH + arrowSlot) / 2;
+            ctx.fillStyle = '#4a9eff';
+            ctx.beginPath();
+            ctx.moveTo(cx, triY + triH / 2);
+            ctx.lineTo(cx - triW / 2, triY - triH / 2);
+            ctx.lineTo(cx + triW / 2, triY - triH / 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#00e5ff';
+          }
+          cy += lineH + arrowSlot;
+        }
+      }
+      
+      // === Underground rings (starting from col 1) ===
+      for (let i = 0; i < allRings.length && i + 1 < cols; i++) {
+        const item = allRings[i];
+        const col = i + 1; // start from column 1
+        const cx = gi.colLefts[col] + gi.colWidths[col] / 2;
+        const bx = cx - bw/2;
+        const by = topY;
+        
+        ctx.fillStyle = '#111';
+        roundRect(ctx, bx, by, bw, boxH, 6);
+        ctx.fill();
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, bx, by, bw, boxH, 6);
+        ctx.stroke();
+        
+        const fontSize = Math.max(14, bw * 0.28);
+        ctx.fillStyle = '#00e5ff';
+        ctx.font = `bold ${fontSize}px Arial`;
+        ctx.fillText(item.code, cx, by + boxH * 0.5);
+      }
+    }
+    
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    // Fairy ring chunk labels (cyan on black, visible at any zoom)
+    const FAIRY_CHUNKS = {
+      '4,9':'CIS','4,23':'AJS\nCIP','6,4':'CIR','6,26':'DKS','7,6':'DJR',
+      '8,20':'AKQ','8,23':'ALP','8,27':'AJR','9,12':'AKR','9,26':'CJR',
+      '10,4':'BLS','10,25':'ALS','10,32':'DKR','10,37':'CKS','10,40':'ALQ',
+      '11,38':'BKR','12,26':'BLR','13,6':'AIS','13,25':'BIS','13,37':'BIP',
+      '14,25':'DJP','14,26':'AIR','14,32':'CLP','15,32':'DIS','16,18':'DLR',
+      '16,23':'CIQ','16,25':'CLS','16,29':'DKP','16,30':'AIQ','16,34':'BIQ',
+      '17,9':'AJP','17,17':'BJS','17,21':'BKP','17,37':'DLQ','18,19':'BJP',
+      '18,24':'AKS','18,27':'CKR','19,5':'CKQ','22,26':'CLR','22,35':'AKP',
+      '26,33':'CJQ'
+    };
+
+    function drawFairyRingChunkLabels(ctx, gi) {
+      if (!gi || !manifest) return;
+      for (const [key, codes] of Object.entries(FAIRY_CHUNKS)) {
+        const [r, c] = key.split(',').map(Number);
+        if (r >= gi.rowTops.length || c >= gi.colLefts.length) continue;
+        const cx = gi.colLefts[c] + gi.colWidths[c] / 2;
+        const cy = gi.rowTops[r] + gi.rowHeights[r] / 2;
+        const chunkW = gi.colWidths[c];
+        const chunkH = gi.rowHeights[r];
+        const lines = codes.split('\n');
+        const fontSize = Math.max(9, Math.min(chunkW, chunkH) * 0.16);
+        ctx.font = `bold ${fontSize}px Arial`;
+        
+        // Measure text
+        const lineHeight = fontSize * 1.2;
+        const totalHeight = lines.length * lineHeight;
+        let maxWidth = 0;
+        for (const line of lines) {
+          const m = ctx.measureText(line);
+          if (m.width > maxWidth) maxWidth = m.width;
+        }
+        const padX = fontSize * 0.3;
+        const padY = fontSize * 0.15;
+        const boxW = maxWidth + padX * 2;
+        const boxH = totalHeight + padY * 2;
+        const boxX = cx - boxW / 2;
+        const boxY = cy - boxH / 2;
+
+        // Black background box
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        const radius = Math.min(boxW, boxH) * 0.15;
+        ctx.beginPath();
+        ctx.moveTo(boxX + radius, boxY);
+        ctx.lineTo(boxX + boxW - radius, boxY);
+        ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + radius);
+        ctx.lineTo(boxX + boxW, boxY + boxH - radius);
+        ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - radius, boxY + boxH);
+        ctx.lineTo(boxX + radius, boxY + boxH);
+        ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - radius);
+        ctx.lineTo(boxX, boxY + radius);
+        ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+        ctx.fill();
+
+        // Cyan text
+        ctx.fillStyle = '#00e5ff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < lines.length; i++) {
+          const textY = cy + (i - (lines.length - 1) / 2) * lineHeight;
+          ctx.fillText(lines[i], cx, textY);
+        }
+      }
+    }
+
+    function zoom(factor) {
+      const rect = fullMap.getBoundingClientRect();
+      const cx = rect.width / 2, cy = rect.height / 2;
+      const natX = (cx - currentTX) / currentScale;
+      const natY = (cy - currentTY) / currentScale;
+      let newScale = currentScale * factor;
+      newScale = Math.max(minScale, Math.min(maxScale, newScale));
+      currentTX = cx - natX * newScale;
+      currentTY = cy - natY * newScale;
+      currentScale = newScale;
+      applyTransform();
+    }
+
+    document.getElementById('zoomInBtn').addEventListener('click', () => zoom(1.2));
+    document.getElementById('zoomOutBtn').addEventListener('click', () => zoom(1 / 1.2));
+
+    // Identify button - toggles chunk ID overlay
+    let identifyMode = false;
+    const identifyBtn = document.getElementById('identifyBtn');
+    identifyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      identifyMode = !identifyMode;
+      identifyBtn.style.color = identifyMode ? '#fff' : '#888';
+      identifyBtn.style.background = identifyMode ? 'rgba(74,158,255,0.5)' : 'rgba(30,30,30,0.85)';
+      drawChunkIds();
+    });
+
+    function drawChunkIds() {
+      const ctx = canvas.getContext('2d');
+      drawGrid(); // redraw grid first
+      if (!identifyMode || !manifest || !window._gridInfo) return;
+      const gi = window._gridInfo;
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let r = 0; r < manifest.rows; r++) {
+        for (let c = 0; c < manifest.cols; c++) {
+          const cx = gi.colLefts[c] + gi.colWidths[c] / 2;
+          const cy = gi.rowTops[r] + gi.rowHeights[r] / 2;
+          const fontSize = Math.max(8, Math.min(gi.colWidths[c], gi.rowHeights[r]) * 0.18);
+          ctx.font = `bold ${fontSize}px Arial`;
+          ctx.fillText(`${r},${c}`, cx, cy);
+        }
+      }
+    }
+
+    fullMap.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const rect = fullMap.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const natX = (mx - currentTX) / currentScale;
+      const natY = (my - currentTY) / currentScale;
+      let newScale = currentScale * factor;
+      newScale = Math.max(minScale, Math.min(maxScale, newScale));
+      currentTX = mx - natX * newScale;
+      currentTY = my - natY * newScale;
+      currentScale = newScale;
+      applyTransform();
+    }, { passive: false });
+
+    let isPanning = false, panStartX, panStartY, panStartTX, panStartTY;
+    let panTimer = null; // throttle transform updates to ~60 fps
+    fullMap.addEventListener('mousedown', (e) => {
+      if (e.target.closest && e.target.closest('#zoomControls')) return;
+      e.preventDefault();
+      isPanning = true; panStartX = e.clientX; panStartY = e.clientY;
+      panStartTX = currentTX; panStartTY = currentTY;
+      fullMap.style.cursor = 'grabbing';
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!isPanning) return;
+      currentTX = panStartTX + (e.clientX - panStartX);
+      currentTY = panStartTY + (e.clientY - panStartY);
+      if (panTimer !== null) return; // at most one transform update per ~16ms
+      panTimer = setTimeout(() => {
+        panTimer = null;
+        applyTransform();
+      }, 16);
+    });
+    window.addEventListener('mouseup', () => {
+      if (isPanning) applyTransform(); // snap to final position on release
+      isPanning = false;
+      fullMap.style.cursor = '';
+      if (panTimer !== null) { clearTimeout(panTimer); panTimer = null; }
+    });
+
+    // === Underground / instance fairy rings popup ===
+    const undergroundBtn = document.getElementById('undergroundBtn');
+    const undergroundPopup = document.getElementById('undergroundPopup');
+    const undergroundPopupClose = document.getElementById('undergroundPopupClose');
+    const undergroundPopupGrid = document.getElementById('undergroundPopupGrid');
+
+    // Location names for the underground / instance rings (from the OSRS Wiki)
+    const UNDERGROUND_LOCATIONS = {
+      'ALR': 'Abyssal Area',
+      'BKS': 'Zanaris',
+      'BLP': 'TzHaar area',
+      'DIP': 'Abyssal Nexus',
+      'DLP': 'Grimstone',
+      'AJQ': 'Dorgesh-Kaan',
+      'BJR': 'Realm of the Fisher King',
+      'BKQ': 'Enchanted Valley',
+      'CKP': "Cosmic entity's plane",
+      'DIQ': 'Player owned house',
+      'DIR': "Gorak's Plane",
+      'DLS': 'Myreque hideout',
+      'BLQ': "Yu'biusk"
+    };
+
+    function makeUndergroundCard(code, location, imageFile, extraCodes) {
+      const card = document.createElement('div');
+      // Square tile filled with the location's map image (from the wiki)
+      card.style.cssText = 'position:relative; aspect-ratio:1/1; box-sizing:border-box; border:2px solid #4a9eff; border-radius:10px; overflow:hidden; background:#0a0a12 url(static/underground/' + imageFile + '.png) center/cover no-repeat;';
+
+      // Location text line attached to the top of the tile
+      const loc = document.createElement('div');
+      loc.textContent = location;
+      loc.style.cssText = 'position:absolute; top:0; left:0; right:0; background:rgba(0,0,0,0.72); color:#e8e8e8; font-size:14px; text-align:center; padding:3px 5px; line-height:1.2; font-family:system-ui,Segoe UI,Arial; max-height:40px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;';
+      card.appendChild(loc);
+
+      // Fairy ring code(s) in a small black rectangle at the center (like the map chunks)
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding-top:16px;';
+      const codes = extraCodes || [code];
+      for (const c of codes) {
+        const badge = document.createElement('div');
+        badge.textContent = c;
+        badge.style.cssText = 'background:rgba(0,0,0,0.88); border:1px solid rgba(0,229,255,0.55); border-radius:4px; color:#00e5ff; font-weight:bold; font-size:15px; font-family:Arial,sans-serif; letter-spacing:2px; padding:1px 9px;';
+        wrap.appendChild(badge);
+      }
+      card.appendChild(wrap);
+      return card;
+    }
+
+    function buildUndergroundPopup() {
+      undergroundPopupGrid.innerHTML = '';
+      // 1. Fairy Resistance Hideout (sequence: AIR -> DLR -> DJQ -> AJS)
+      undergroundPopupGrid.appendChild(makeUndergroundCard('', 'Fairy Resistance Hideout', 'HIDEOUT', ['AIR', 'DLR', 'DJQ', 'AJS']));
+      // 2. All other underground rings
+      for (const code of UNDERGROUND_RINGS) {
+        undergroundPopupGrid.appendChild(makeUndergroundCard(code, UNDERGROUND_LOCATIONS[code] || code, code));
+      }
+    }
+
+    undergroundBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      buildUndergroundPopup();
+      undergroundPopup.style.display = 'flex';
+    });
+    undergroundPopupClose.addEventListener('click', () => { undergroundPopup.style.display = 'none'; });
+    undergroundPopup.addEventListener('click', (e) => {
+      if (e.target === undergroundPopup) undergroundPopup.style.display = 'none';
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') undergroundPopup.style.display = 'none';
+    });
+
+    async function initMap() {
+      try {
+        const resp = await fetch('static/chunks/manifest.json');
+        manifest = await resp.json();
+      } catch(e) { console.error('Failed to load manifest', e); return; }
+
+      if (!stitched.complete) await new Promise(r => stitched.addEventListener('load', r));
+      setupCanvas();
+      drawChunkIds();
+
+      const rect = fullMap.getBoundingClientRect();
+      currentScale = Math.min(rect.width / stitched.naturalWidth, rect.height / stitched.naturalHeight, 1);
+      const gi = window._gridInfo;
+      if (gi) {
+        const cx = gi.colLefts[DEFAULT_CENTER_COL] + gi.colWidths[DEFAULT_CENTER_COL] / 2;
+        const cy = gi.rowTops[DEFAULT_CENTER_ROW] + gi.rowHeights[DEFAULT_CENTER_ROW] / 2;
+        currentTX = rect.width / 2 - cx * currentScale;
+        currentTY = rect.height / 2 - cy * currentScale;
+        applyTransform();
+      }
+
+      try {
+        if (window.BossPickerAPI && typeof window.BossPickerAPI.init === 'function') {
+          await window.BossPickerAPI.init(manifest, stitchedWrap, canvas, fullMap, false);
+        }
+      } catch(e) { console.warn('BossPickerAPI init failed', e); }
+    }
+
+    initMap();
+  </script>
+</body>
+</html>
