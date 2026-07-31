@@ -587,7 +587,7 @@
       for (const c of codes) {
         const badge = document.createElement('div');
         badge.textContent = c;
-        badge.style.cssText = 'background:rgba(0,0,0,0.88); border:1px solid rgba(0,229,255,0.55); border-radius:4px; color:#00e5ff; font-weight:bold; font-size:15px; font-family:Arial,sans-serif; letter-spacing:2px; padding:1px 9px;';
+        badge.style.cssText = 'background:rgba(0,0,0,0.88); border:1px solid rgba(0,229,255,0.55); border-radius:4px; color:#00e5ff; font-weight:bold; font-size:15px; font-family:Arial,sans-serif; letter-spacing:2px; padding:1px 9px; display:flex; align-items:center; justify-content:center; width:60px; box-sizing:border-box;';
         wrap.appendChild(badge);
       }
       card.appendChild(wrap);
