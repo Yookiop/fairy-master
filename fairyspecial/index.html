@@ -37,7 +37,7 @@
     </div>
   </div>
 
-  <script src="static/index.js?v=2"></script>
+  <script src="static/index.js?v=3"></script>
   <script>
     const stitched = document.getElementById('stitchedImg');
     const fullMap = document.getElementById('fullMap');
@@ -51,8 +51,12 @@
 
     const DEFAULT_GRID_NUDGE = { x: 0, y: -120 };
     const DEFAULT_ROW_SCALE_PERCENT = 97;
-    const DEFAULT_CENTER_ROW = 15;
-    const DEFAULT_CENTER_COL = 23;
+    const DEFAULT_CENTER_ROW = 14; // startup center: chunk (14,33) — roughly Draynor / south coast
+    const DEFAULT_CENTER_COL = 33;
+    // Startup zoom: show roughly a 10x7 chunk band centered on the chunk above (like the pasted screenshot)
+    // instead of fitting the entire map on screen.
+    const START_SPAN_COLS = 10;
+    const START_SPAN_ROWS = 7;
     const UNDERGROUND_PAD = 0; // underground row removed — replaced by the popup button
 
     function setupCanvas() {
@@ -295,17 +299,37 @@
 
     function drawFairyRingChunkLabels(ctx, gi) {
       if (!gi || !manifest) return;
+      // Game-coord -> chunk conversion, must match placeFairyRingMarker in static/index.js
+      const TILE_SIZE = 64;
+      const MIN_X = 1024;
+      const MAX_Y = 4160;
+      const X_CORRECTION = -6;
+      // Exception chunk (fully unchanged behavior: centered label, no leader line)
+      const EXCEPTION_CHUNKS = new Set(['10,32']);
+      // Per-chunk label overrides:
+      //  - {dx, dy}: direction from ring to label (close placement)
+      //  - {center: true}: label centered in the chunk, but keep the leader line
+      //  - {leftCenter: true}: label on the left side of the chunk, vertically centered
+      //  - offsetX/offsetY: extra pixel shift after close placement
+      const DIRECTION_OVERRIDES = {
+        '8,27': { dx: 1, dy: 1 },                // Kurask boss top-right -> label bottom-right of the ring
+        '7,6': { center: true },                 // DJR -> centered label + leader line
+        '15,32': { leftCenter: true, offsetX: 20, offsetY: 25 }, // DIS -> left side, nudged a bit toward bottom-right
+        '16,34': { leftCenter: true, offsetX: 20, offsetY: 25 }, // BIQ -> left-middle, nudged a bit toward bottom-right
+        '17,21': { dx: 1, dy: -1, offsetX: -45 } // BKP -> shift left, clear of the Smoke Devil boss
+      };
+
       for (const [key, codes] of Object.entries(FAIRY_CHUNKS)) {
         const [r, c] = key.split(',').map(Number);
         if (r >= gi.rowTops.length || c >= gi.colLefts.length) continue;
-        const cx = gi.colLefts[c] + gi.colWidths[c] / 2;
-        const cy = gi.rowTops[r] + gi.rowHeights[r] / 2;
+        const chunkX = gi.colLefts[c];
+        const chunkY = gi.rowTops[r];
         const chunkW = gi.colWidths[c];
         const chunkH = gi.rowHeights[r];
         const lines = codes.split('\n');
         const fontSize = Math.max(9, Math.min(chunkW, chunkH) * 0.16);
         ctx.font = `bold ${fontSize}px Arial`;
-        
+
         // Measure text
         const lineHeight = fontSize * 1.2;
         const totalHeight = lines.length * lineHeight;
@@ -318,8 +342,94 @@
         const padY = fontSize * 0.15;
         const boxW = maxWidth + padX * 2;
         const boxH = totalHeight + padY * 2;
-        const boxX = cx - boxW / 2;
-        const boxY = cy - boxH / 2;
+
+        // Default: centered box (used for the exception chunk)
+        let boxX = chunkX + (chunkW - boxW) / 2;
+        let boxY = chunkY + (chunkH - boxH) / 2;
+
+        // Icon anchor = average position of the fairy ring(s) in this chunk (pixel coords)
+        let anchorX = 0, anchorY = 0, anchorCount = 0;
+        for (const code of lines) {
+          const loc = FAIRY_RING_LOCATIONS[code];
+          if (!loc || loc.x === undefined) continue;
+          const chunkGameX = MIN_X + c * TILE_SIZE;
+          const chunkGameY = MAX_Y - r * TILE_SIZE;
+          const fracX = (loc.x + X_CORRECTION - chunkGameX) / TILE_SIZE;
+          const fracY = (chunkGameY - loc.y) / TILE_SIZE;
+          anchorX += chunkX + fracX * chunkW;
+          anchorY += chunkY + fracY * chunkH;
+          anchorCount++;
+        }
+
+        const isException = EXCEPTION_CHUNKS.has(key);
+        if (!isException && anchorCount > 0) {
+          const iconX = anchorX / anchorCount;
+          const iconY = anchorY / anchorCount;
+          const fracX = (iconX - chunkX) / chunkW;
+          const fracY = (iconY - chunkY) / chunkH;
+          const iconSize = Math.min(chunkW, chunkH) * 0.135; // matches placeFairyRingMarker
+
+          const pad = Math.max(6, fontSize * 0.2);
+          const override = DIRECTION_OVERRIDES[key];
+          if (override && override.center) {
+            // Label centered in the chunk (the leader line is still drawn below)
+            boxX = chunkX + (chunkW - boxW) / 2;
+            boxY = chunkY + (chunkH - boxH) / 2;
+          } else if (override && override.leftCenter) {
+            // Label on the left side of the chunk, vertically centered
+            boxX = chunkX + pad;
+            boxY = chunkY + (chunkH - boxH) / 2;
+            boxX += (override.offsetX || 0);
+            boxY += (override.offsetY || 0);
+          } else {
+            // Direction from the ring toward the label (opposite side, but close to the ring).
+            let dx, dy;
+            if (override) {
+              dx = override.dx; dy = override.dy;
+            } else {
+              const centerLo = 0.42, centerHi = 0.58;
+              if (fracX >= centerLo && fracX <= centerHi && fracY >= centerLo && fracY <= centerHi) {
+                dx = 0; dy = 1; // ring in the middle -> label below it
+              } else {
+                dx = fracX < 0.5 ? 1 : -1;
+                dy = fracY < 0.5 ? 1 : -1;
+              }
+            }
+
+            // Place the box right next to the ring (NOT in the far corner of the chunk)
+            const gap = 10;
+            if (dx > 0) boxX = iconX + iconSize / 2 + gap;
+            else if (dx < 0) boxX = iconX - iconSize / 2 - gap - boxW;
+            else boxX = iconX - boxW / 2;
+            if (dy > 0) boxY = iconY + iconSize / 2 + gap;
+            else if (dy < 0) boxY = iconY - iconSize / 2 - gap - boxH;
+            else boxY = iconY - boxH / 2;
+
+            // Optional per-chunk fine-tuning
+            if (override) {
+              boxX += (override.offsetX || 0);
+              boxY += (override.offsetY || 0);
+            }
+
+            // Keep the box inside the chunk
+            boxX = Math.max(chunkX + pad, Math.min(chunkX + chunkW - boxW - pad, boxX));
+            boxY = Math.max(chunkY + pad, Math.min(chunkY + chunkH - boxH - pad, boxY));
+          }
+
+          // Thick black leader line from the icon to the label box (drawn under the box)
+          const inside = iconX >= boxX && iconX <= boxX + boxW && iconY >= boxY && iconY <= boxY + boxH;
+          if (!inside) {
+            const lineX = Math.max(boxX, Math.min(iconX, boxX + boxW));
+            const lineY = Math.max(boxY, Math.min(iconY, boxY + boxH));
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(iconX, iconY);
+            ctx.lineTo(lineX, lineY);
+            ctx.stroke();
+          }
+        }
 
         // Black background box
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -340,9 +450,11 @@
         ctx.fillStyle = '#00e5ff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        const textCX = boxX + boxW / 2;
+        const textCY = boxY + boxH / 2;
         for (let i = 0; i < lines.length; i++) {
-          const textY = cy + (i - (lines.length - 1) / 2) * lineHeight;
-          ctx.fillText(lines[i], cx, textY);
+          const textY = textCY + (i - (lines.length - 1) / 2) * lineHeight;
+          ctx.fillText(lines[i], textCX, textY);
         }
       }
     }
@@ -516,15 +628,23 @@
       drawChunkIds();
 
       const rect = fullMap.getBoundingClientRect();
-      currentScale = Math.min(rect.width / stitched.naturalWidth, rect.height / stitched.naturalHeight, 1);
       const gi = window._gridInfo;
       if (gi) {
+        // Startup zoom: fit a ~START_SPAN_COLS x START_SPAN_ROWS chunk band into the viewport,
+        // centered on chunk (DEFAULT_CENTER_ROW, DEFAULT_CENTER_COL) so the map starts zoomed in
+        // at the level shown in the pasted screenshot instead of showing the whole map.
+        const colW = gi.colWidths[DEFAULT_CENTER_COL] || baseTileW;
+        const rowH = gi.rowHeights[DEFAULT_CENTER_ROW] || baseTileH;
+        currentScale = Math.min(rect.width / (START_SPAN_COLS * colW), rect.height / (START_SPAN_ROWS * rowH));
+        currentScale = Math.max(minScale, Math.min(maxScale, currentScale));
         const cx = gi.colLefts[DEFAULT_CENTER_COL] + gi.colWidths[DEFAULT_CENTER_COL] / 2;
         const cy = gi.rowTops[DEFAULT_CENTER_ROW] + gi.rowHeights[DEFAULT_CENTER_ROW] / 2;
         currentTX = rect.width / 2 - cx * currentScale;
         currentTY = rect.height / 2 - cy * currentScale;
-        applyTransform();
+      } else {
+        currentScale = Math.min(rect.width / stitched.naturalWidth, rect.height / stitched.naturalHeight, 1);
       }
+      applyTransform();
 
       try {
         if (window.BossPickerAPI && typeof window.BossPickerAPI.init === 'function') {

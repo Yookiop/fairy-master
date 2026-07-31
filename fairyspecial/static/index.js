@@ -1,16 +1,18 @@
 // Boss images configuration and plotting API
 const CODE_CONFIGURED_BOSS_IMAGES = Object.freeze({
-    'Scurrius': {
-        fileName: 'Scurrius.png',
-        chunkIds: ['chunk_10_32']
-    },
     'Bryophyta': {
         fileName: 'Bryophyta.png',
+        chunkIds: ['chunk_10_32']
+    },'Scurrius': {
+        fileName: 'Scurrius.png',
         chunkIds: ['chunk_10_32']
     },
     'Obor': {
         fileName: 'Obor.png',
         chunkIds: ['chunk_10_32']
+    },'Lizardman Shaman': {
+        fileName: 'Lizardman_shaman.png',
+        chunkIds: ['chunk_7_6']
     },
     'Yama': {
         fileName: 'Yama.png',
@@ -23,10 +25,6 @@ const CODE_CONFIGURED_BOSS_IMAGES = Object.freeze({
     'Kurask': {
         fileName: 'Kurask.png',
         chunkIds: ['chunk_8_27']
-    },
-    'Lizardman Shaman': {
-        fileName: 'Lizardman_shaman.png',
-        chunkIds: ['chunk_7_6']
     },
     'Leviathan': {
         fileName: 'The_Leviathan.png',
@@ -447,14 +445,12 @@ async function loadCombatAchievementsFromCSV() {
     const fracY = (chunkGameY - cfg.y) / TILE_SIZE; // 0..1 within chunk
 
     const size = Math.min(chunkW, chunkH) * 0.135;
-    const labelHeight = size * 0.38;
-    const totalHeight = size + labelHeight;
     let offsetX = chunkX + fracX * chunkW - size / 2;
-    let offsetY = chunkY + fracY * chunkH - totalHeight / 2;
+    let offsetY = chunkY + fracY * chunkH - size / 2;
     
     // Constrain within chunk boundaries
     offsetX = Math.max(chunkX, Math.min(chunkX + chunkW - size, offsetX));
-    offsetY = Math.max(chunkY, Math.min(chunkY + chunkH - totalHeight, offsetY));
+    offsetY = Math.max(chunkY, Math.min(chunkY + chunkH - size, offsetY));
 
     const container = ensureFairyRingMarkersContainer(stitchedWrap);
     
@@ -463,24 +459,14 @@ async function loadCombatAchievementsFromCSV() {
     wrapper.style.left = offsetX + 'px';
     wrapper.style.top = offsetY + 'px';
     wrapper.style.width = size + 'px';
-    wrapper.style.height = totalHeight + 'px';
+    wrapper.style.height = size + 'px';
     wrapper.style.pointerEvents = 'none';
     
     const dest = cfg.dest || '';
     wrapper.title = code + ': ' + dest;
 
-    const label = document.createElement('div');
-    label.textContent = code;
-    label.style.color = '#00e5ff';
-    label.style.fontFamily = 'Arial, sans-serif';
-    label.style.fontWeight = 'bold';
-    label.style.fontSize = labelHeight + 'px';
-    label.style.textAlign = 'center';
-    label.style.textShadow = '0 0 2px #000, 0 0 4px #000';
-    label.style.lineHeight = '1';
-    label.style.height = labelHeight + 'px';
-    label.style.pointerEvents = 'none';
-
+    // Icon only — the blue code label on black is drawn on the grid canvas
+    // (drawFairyRingChunkLabels) with a thick black leader line to this icon.
     const img = document.createElement('img');
     img.src = 'static/boss_images/fairy_ring_travel.png';
     img.className = 'fairy-ring-marker';
@@ -490,7 +476,6 @@ async function loadCombatAchievementsFromCSV() {
     img.style.display = 'block';
     img.style.filter = 'drop-shadow(0 1px 3px rgba(0,0,0,0.6)) brightness(1.1)';
 
-    wrapper.appendChild(label);
     wrapper.appendChild(img);
     container.appendChild(wrapper);
     return wrapper;
