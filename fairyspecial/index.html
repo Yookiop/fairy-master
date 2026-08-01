@@ -27,7 +27,9 @@
     .rank-tier-zone.drag-over { border-color:#f0c040; background:rgba(240,192,64,0.08); }
     .rank-tile { position:relative; width:100%; height:100%; border:2px solid rgba(255,255,255,0.35); border-radius:8px; overflow:hidden; box-sizing:border-box; cursor:grab; }
     .rank-tile.dragging { opacity:0.4; border-style:dashed; }
-    .rank-tile-badge { position:absolute; left:2px; right:2px; bottom:2px; text-align:center; background:rgba(0,0,0,0.85); border:1px solid rgba(0,229,255,0.55); border-radius:4px; color:#00e5ff; font-weight:bold; font-size:12px; letter-spacing:1px; padding:1px 2px; line-height:1.15; font-family:Arial,sans-serif; }
+    .rank-tile-badge { position:absolute; left:2px; right:2px; top:2px; text-align:center; background:rgba(0,0,0,0.85); border:1px solid rgba(0,229,255,0.55); border-radius:4px; color:#00e5ff; font-weight:bold; font-size:12px; letter-spacing:1px; padding:1px 2px; line-height:1.15; font-family:Arial,sans-serif; }
+    .rank-tile-badge.clickable { cursor:pointer; }
+    .rank-tile-badge.clickable:hover { border-color:#f0c040; color:#fff; }
   </style>
 </head>
 <body>
@@ -61,6 +63,21 @@
       <button id="rankPopupClose" title="Close" style="position:absolute; top:10px; right:12px; width:36px; height:36px; font-size:18px; font-weight:bold; border:none; border-radius:8px; background:rgba(255,255,255,0.08); color:#ccc; cursor:pointer;">✕</button>
       <h2 style="margin:0 0 14px; color:#e8e8e8; font-size:42px; font-weight:bold; text-align:center; font-family:system-ui,Segoe UI,Arial;">Fairy ring tier list</h2>
       <div id="rankTierList" style="display:flex; flex-direction:column; gap:8px;"></div>
+    </div>
+  </div>
+
+  <!-- Manual positioning popup (normal-map fairy ring chunks) -->
+  <div id="alignPopup" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:100002; align-items:center; justify-content:center;">
+    <div style="background:#151528; border:1px solid #f0c040; border-radius:12px; padding:18px 20px; max-width:600px; width:92%; position:relative; box-shadow:0 12px 50px rgba(0,0,0,0.7);">
+      <button id="alignPopupClose" title="Close" style="position:absolute; top:10px; right:12px; width:36px; height:36px; font-size:18px; font-weight:bold; border:none; border-radius:8px; background:rgba(255,255,255,0.08); color:#ccc; cursor:pointer;">✕</button>
+      <h2 id="alignPopupTitle" style="margin:0 0 4px; color:#e8e8e8; font-size:26px; font-weight:bold; text-align:center; font-family:system-ui,Segoe UI,Arial;">Position fairy ring chunk</h2>
+      <p style="margin:0 0 12px; text-align:center; color:#999; font-size:13px; font-family:system-ui,Segoe UI,Arial;">Scroll or use the buttons to zoom, drag to position the map. Close the popup to use this view in the tier list.</p>
+      <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin:0 0 10px;">
+        <button id="alignZoomOutBtn" title="Zoom out" style="width:46px;height:40px;font-size:22px;font-weight:bold;border:none;border-radius:8px;background:rgba(255,255,255,0.08);color:#e8e8e8;cursor:pointer;">&minus;</button>
+        <button id="alignZoomInBtn" title="Zoom in" style="width:46px;height:40px;font-size:22px;font-weight:bold;border:none;border-radius:8px;background:rgba(255,255,255,0.08);color:#e8e8e8;cursor:pointer;">+</button>
+        <span id="alignZoomLabel" style="color:#999;font-size:14px;min-width:56px;text-align:center;font-family:system-ui,Segoe UI,Arial;">130%</span>
+      </div>
+      <div id="alignViewport" style="width:100%; aspect-ratio:1/1; border:2px solid #4a9eff; border-radius:10px; overflow:hidden; background:#0a0a12; cursor:grab; touch-action:none;"></div>
     </div>
   </div>
 
@@ -683,18 +700,73 @@
     const rankPopupClose = document.getElementById('rankPopupClose');
     const rankTierList = document.getElementById('rankTierList');
 
+    // Manual per-chunk positioning (workaround for the normal-map chunk alignment).
+    // Each surface chunk can be positioned with BOTH zoom and pan. The align popup
+    // uses a CENTER-POINT model: (cx, cy) = which chunk fraction sits at the centre
+    // of the viewport; zoom = background-size multiplier. Wheel zooms AROUND THE
+    // CURSOR (point-and-zoom). Saved per code as { zoom, cx, cy }. Unadjusted
+    // chunks (or zoom<=1) render as center/cover.
+    const ALIGN_OFFSETS_KEY = 'fairyspecial.rankings.offsets.v1';
+    const ALIGN_ZOOM_MIN = 1.0;
+    const ALIGN_ZOOM_MAX = 12.0;          // high enough to centre a corner region of the chunk
+    const ALIGN_ZOOM_STEP = 1.15;         // wheel step
+    const ALIGN_BUTTON_STEP = 1.5;        // + / - button step
+    const ALIGN_DEFAULT_ZOOM = 1.3;
+    let alignOffsets = loadAlignOffsets();
+    let rankItemsByCode = {};
+
+    function loadAlignOffsets() {
+      try { return JSON.parse(localStorage.getItem(ALIGN_OFFSETS_KEY)) || {}; } catch (e) { return {}; }
+    }
+    function saveAlignOffsets() {
+      try { localStorage.setItem(ALIGN_OFFSETS_KEY, JSON.stringify(alignOffsets)); } catch (e) {}
+    }
+    // Clamp the centre point so the image (zoom x tile) always covers the tile.
+    function alignClampC(v, zoom) { const m = 1 / (2 * zoom); return Math.max(m, Math.min(1 - m, v)); }
+    // Normalise a saved offset; old {zoom, fx, fy} format -> {zoom, cx, cy}.
+    function normalizeAlignOffset(off) {
+      if (!off) return null;
+      const zoom = off.zoom || ALIGN_DEFAULT_ZOOM;
+      if (off.cx !== undefined) return { zoom, cx: off.cx, cy: off.cy };
+      return { zoom, cx: 0.5 - (off.fx || 0) / zoom, cy: 0.5 - (off.fy || 0) / zoom };
+    }
+
+    // Background CSS for a surface chunk image at (zoom, cx, cy). zoom<=1 => full chunk.
+    function alignBgCss(img, zoom, cx, cy) {
+      if (zoom <= 1.001) return '#0a0a12 url(' + img + ') center/cover no-repeat';
+      const px = Math.round((cx * zoom - 0.5) / (zoom - 1) * 10000) / 100;
+      const py = Math.round((cy * zoom - 0.5) / (zoom - 1) * 10000) / 100;
+      return '#0a0a12 url(' + img + ') ' + px + '% ' + py + '% / ' + (zoom * 100) + '% auto no-repeat';
+    }
+
+    function rankTileBackground(item) {
+      if (item.kind !== 'surface') return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
+      const off = normalizeAlignOffset(alignOffsets[item.code]);
+      if (!off || off.zoom <= 1.001) return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
+      return alignBgCss(item.img, off.zoom, off.cx, off.cy);
+    }
+
+    // Background style for a rank tile. Underground rings use center/cover;
+    // normal-map chunks use the saved (zoom, fx, fy) or the full chunk.
+    function rankTileBackground(item) {
+      if (item.kind !== 'surface') return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
+      const off = normalizeAlignOffset(alignOffsets[item.code]);
+      if (!off || off.zoom <= 1.001) return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
+      return alignBgCss(item.img, off.zoom, off.cx, off.cy);
+    }
+
     // Every rankable fairy ring. Surface rings use their chunk image;
     // underground/instance rings use the existing underground image.
     function buildRankItems() {
       const items = [];
       for (const [code, cfg] of Object.entries(FAIRY_RING_LOCATIONS)) {
-        items.push({ code, name: cfg.dest || code, img: 'static/chunks/' + cfg.chunkId + '.png' });
+        items.push({ code, name: cfg.dest || code, img: 'static/chunks/' + cfg.chunkId + '.png', kind: 'surface' });
       }
       for (const code of UNDERGROUND_RINGS) {
-        items.push({ code, name: UNDERGROUND_LOCATIONS[code] || code, img: 'static/underground/' + code + '.png' });
+        items.push({ code, name: UNDERGROUND_LOCATIONS[code] || code, img: 'static/underground/' + code + '.png', kind: 'underground' });
       }
       // Fairy Resistance Hideout (reached via AIR -> DLR -> DJQ -> AJS)
-      items.push({ code: 'HIDEOUT', name: 'Fairy Resistance Hideout (AIR -> DLR -> DJQ -> AJS)', img: 'static/underground/HIDEOUT.png' });
+      items.push({ code: 'HIDEOUT', name: 'Fairy Resistance Hideout (AIR -> DLR -> DJQ -> AJS)', img: 'static/underground/HIDEOUT.png', kind: 'underground' });
       items.sort((a, b) => a.code.localeCompare(b.code));
       return items;
     }
@@ -705,10 +777,20 @@
       tile.dataset.code = item.code;
       tile.draggable = true;
       tile.title = item.code + (item.name && item.name !== item.code ? ' - ' + item.name : '');
-      tile.style.background = '#0a0a12 url(' + item.img + ') center/cover no-repeat';
+      tile.style.background = rankTileBackground(item);
       const badge = document.createElement('div');
       badge.className = 'rank-tile-badge';
       badge.textContent = item.code;
+      // Normal-map chunks: clicking the code badge opens the manual positioning popup.
+      if (item.kind === 'surface') {
+        badge.classList.add('clickable');
+        badge.title = 'Click to position';
+        badge.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          openAlignPopup(item.code, item.img, item.name);
+        });
+      }
       tile.appendChild(badge);
       tile.addEventListener('dragstart', (e) => {
         e.dataTransfer.setData('text/plain', item.code);
@@ -773,8 +855,9 @@
     function buildRankPopup() {
       rankTierList.innerHTML = '';
       const items = buildRankItems();
+      rankItemsByCode = {};
       const tileByCode = {};
-      for (const item of items) tileByCode[item.code] = makeRankTile(item);
+      for (const item of items) { rankItemsByCode[item.code] = item; tileByCode[item.code] = makeRankTile(item); }
 
       // Tier rows S..E
       const zones = {};
@@ -837,6 +920,102 @@
     });
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') rankPopup.style.display = 'none';
+    });
+
+    // === Manual positioning popup (normal-map fairy ring chunks) ===
+    const alignPopup = document.getElementById('alignPopup');
+    const alignPopupClose = document.getElementById('alignPopupClose');
+    const alignViewport = document.getElementById('alignViewport');
+    const alignPopupTitle = document.getElementById('alignPopupTitle');
+    const alignZoomInBtn = document.getElementById('alignZoomInBtn');
+    const alignZoomOutBtn = document.getElementById('alignZoomOutBtn');
+    const alignZoomLabel = document.getElementById('alignZoomLabel');
+    let alignCode = null;
+    let alignImg = '';
+    let alignState = { zoom: ALIGN_DEFAULT_ZOOM, cx: 0.5, cy: 0.5 };
+    let alignDirty = false;
+    let alignDragging = false, alignStartX = 0, alignStartY = 0, alignStartCx = 0, alignStartCy = 0;
+
+    function renderAlignViewport() {
+      alignViewport.style.background = alignBgCss(alignImg, alignState.zoom, alignState.cx, alignState.cy);
+    }
+    function updateAlignZoomLabel() {
+      alignZoomLabel.textContent = Math.round(alignState.zoom * 100) + '%';
+    }
+    // Zoom by `factor` keeping the image point under (focusX, focusY) fixed.
+    function applyAlignZoom(factor, focusX, focusY) {
+      if (focusX === undefined) { focusX = 0.5; focusY = 0.5; }
+      const imgX = alignState.cx + (focusX - 0.5) / alignState.zoom;
+      const imgY = alignState.cy + (focusY - 0.5) / alignState.zoom;
+      alignState.zoom = Math.max(ALIGN_ZOOM_MIN, Math.min(ALIGN_ZOOM_MAX, alignState.zoom * factor));
+      alignState.cx = alignClampC(imgX - (focusX - 0.5) / alignState.zoom, alignState.zoom);
+      alignState.cy = alignClampC(imgY - (focusY - 0.5) / alignState.zoom, alignState.zoom);
+      alignDirty = true;
+      renderAlignViewport();
+      updateAlignZoomLabel();
+    }
+
+    function openAlignPopup(code, img, name) {
+      alignCode = code;
+      alignImg = img;
+      const saved = normalizeAlignOffset(alignOffsets[code]);
+      alignState = saved
+        ? { zoom: saved.zoom, cx: alignClampC(saved.cx, saved.zoom), cy: alignClampC(saved.cy, saved.zoom) }
+        : { zoom: ALIGN_DEFAULT_ZOOM, cx: 0.5, cy: 0.5 };
+      alignDirty = false;
+      alignPopupTitle.textContent = 'Position ' + code + (name && name !== code ? ' - ' + name : '');
+      renderAlignViewport();
+      updateAlignZoomLabel();
+      alignViewport.style.cursor = 'grab';
+      alignPopup.style.display = 'flex';
+    }
+
+    function closeAlignPopup() {
+      // Only save when the user actually zoomed or panned.
+      if (alignCode && alignDirty) {
+        alignOffsets[alignCode] = { zoom: alignState.zoom, cx: alignState.cx, cy: alignState.cy };
+        saveAlignOffsets();
+        // Apply the new position to the tile in the tier list
+        const item = rankItemsByCode[alignCode];
+        const tile = rankTierList.querySelector('.rank-tile[data-code="' + alignCode + '"]');
+        if (tile && item) tile.style.background = rankTileBackground(item);
+      }
+      alignCode = null;
+      alignPopup.style.display = 'none';
+    }
+
+    alignViewport.addEventListener('mousedown', (e) => {
+      alignDragging = true;
+      alignStartX = e.clientX; alignStartY = e.clientY;
+      alignStartCx = alignState.cx; alignStartCy = alignState.cy;
+      alignViewport.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!alignDragging) return;
+      const rect = alignViewport.getBoundingClientRect();
+      alignState.cx = alignClampC(alignStartCx - (e.clientX - alignStartX) / (rect.width * alignState.zoom), alignState.zoom);
+      alignState.cy = alignClampC(alignStartCy - (e.clientY - alignStartY) / (rect.height * alignState.zoom), alignState.zoom);
+      alignDirty = true;
+      renderAlignViewport();
+    });
+    window.addEventListener('mouseup', () => {
+      if (alignDragging) { alignDragging = false; alignViewport.style.cursor = 'grab'; }
+    });
+    // Scroll zooms AROUND THE CURSOR (point at the island and zoom in).
+    alignViewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = alignViewport.getBoundingClientRect();
+      const fx = (e.clientX - rect.left) / rect.width;
+      const fy = (e.clientY - rect.top) / rect.height;
+      applyAlignZoom(e.deltaY < 0 ? ALIGN_ZOOM_STEP : 1 / ALIGN_ZOOM_STEP, fx, fy);
+    }, { passive: false });
+    alignZoomInBtn.addEventListener('click', () => applyAlignZoom(ALIGN_BUTTON_STEP));
+    alignZoomOutBtn.addEventListener('click', () => applyAlignZoom(1 / ALIGN_BUTTON_STEP));
+    alignPopupClose.addEventListener('click', () => closeAlignPopup());
+    alignPopup.addEventListener('click', (e) => { if (e.target === alignPopup) closeAlignPopup(); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAlignPopup();
     });
 
     async function initMap() {
