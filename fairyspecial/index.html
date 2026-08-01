@@ -139,7 +139,7 @@
       const gridBottom = gi.rowTops[gi.rowTops.length - 1] + gi.rowHeights[gi.rowHeights.length - 1];
       
       // Default chunk grid: dark gray (user asked gray borders instead of black, then dark gray), slightly thicker than before
-      ctx.strokeStyle = 'rgba(73,73,73,0.9)'; // 10% darker gray (81 -> 73)
+      ctx.strokeStyle = 'rgba(55,55,55,0.9)'; // 25% darker gray (73 -> 55)
       ctx.lineWidth = 3;
       // Row lines
       for (let r = 0; r <= manifest.rows; r++) {
@@ -174,7 +174,7 @@
           const y = gi.rowTops[r];
           const w = gi.colWidths[c];
           const h = gi.rowHeights[r];
-          ctx.fillStyle = 'rgba(0,0,0,0.599)'; // black overlay, 10% darker opacity (0.5445 -> 0.599)
+          ctx.fillStyle = 'rgba(0,0,0,0.749)'; // black overlay, 25% darker opacity (0.599 -> 0.749)
           ctx.fillRect(x, y, w, h);
         }
       }
