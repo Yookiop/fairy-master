@@ -554,6 +554,7 @@
     let panTimer = null; // throttle transform updates to ~60 fps
     fullMap.addEventListener('mousedown', (e) => {
       if (e.target.closest && e.target.closest('#zoomControls')) return;
+      if (e.button !== 0) return; // only left mouse button pans; right-click drag is disabled
       e.preventDefault();
       isPanning = true; panStartX = e.clientX; panStartY = e.clientY;
       panStartTX = currentTX; panStartTY = currentTY;
