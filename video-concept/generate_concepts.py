@@ -1,6 +1,6 @@
 # Generates 1920x1080 video concept images for FairyMaster ("locked to the fairy ring chunks")
 # Built from the REAL map tiles in fairyspecial/static/chunks.
-import json, os, math
+import json, os, math, re
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
 BASE = r'c:\administratie\git\FairyMaster\fairyspecial\static\chunks'
@@ -18,6 +18,27 @@ FAIRY = {
     '17,9', '17,17', '17,21', '17,37', '18,19', '18,24', '18,27', '19,5', '22,26', '22,35', '26,33'
 }
 CHUNK_PX = 256  # each chunk is 256x256 px
+
+# Ring game coords -> calibrated stitched-map position, SAME as the app:
+# colWidths 256px, rows scaled to 97% = 248px (DEFAULT_ROW_SCALE_PERCENT=97).
+# Verified against the app's DOM marker positions (CIS=(2424,1128), CLP y=3689, ...).
+INDEX_JS = r'c:\administratie\git\FairyMaster\fairyspecial\static\index.js'
+TILE, MIN_X, MAX_Y, XC = 64, 1024, 4160, -6
+ROW_H = 248  # 256 * 0.97 rounded
+
+def load_rings():
+    js = open(INDEX_JS, encoding='utf-8').read()
+    block = re.search(r"const FAIRY_RING_LOCATIONS = Object\.freeze\(\{(.*?)\}\);", js, re.S).group(1)
+    rings = []
+    for m in re.finditer(r"'(\w+)':\s*\{ chunkId: 'chunk_(\d+)_(\d+)', dest: (?:'[^']*'|\"[^\"]*\"), x: (\d+), y: (\d+) \}", block):
+        code, r, c, x, y = m.groups()
+        r, c, x, y = int(r), int(c), int(x), int(y)
+        if f'{r},{c}' not in FAIRY:
+            continue
+        fx = (x + XC - (MIN_X + c * TILE)) / TILE
+        fy = ((MAX_Y - r * TILE) - y) / TILE
+        rings.append((c * CHUNK_PX + fx * CHUNK_PX, r * ROW_H + fy * ROW_H))
+    return rings
 
 def build_overview(scale):
     """Compose the full map (46x31 grid) at the given scale (chunk size = 256/scale)."""
@@ -209,12 +230,10 @@ ov = Image.new('RGBA', (W, H), (0, 0, 0, 0))
 d = ImageDraw.Draw(ov, 'RGBA')
 # node centers (canvas coords)
 nodes = []
-for r in range(ROWS):
-    for c in range(COLS):
-        if f'{r},{c}' in FAIRY:
-            cx = ox + (c + 0.5) * cs_small * ov_scale
-            cy = oy + (r + 0.5) * cs_small * ov_scale
-            nodes.append((cx, cy))
+for (sx, sy) in load_rings():
+    cx = ox + (sx / 8) * ov_scale
+    cy = oy + (sy / 8) * ov_scale
+    nodes.append((cx, cy))
 # Clean network via a Minimum Spanning Tree: connects all 41 rings with the
 # fewest/shortest lines instead of a dense web (especially in the middle).
 parent = list(range(len(nodes)))
