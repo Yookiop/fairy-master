@@ -11,6 +11,23 @@
       transform: translateZ(0); 
     }
     img { -webkit-user-drag:none; user-drag:none; }
+
+    /* Fairy ring tier list (Rank fairy rings) popup */
+    #rankTierList { font-family:system-ui,Segoe UI,Arial; }
+    .rank-tier { display:flex; align-items:stretch; gap:10px; }
+    .rank-tier-label { width:56px; min-width:56px; display:flex; align-items:center; justify-content:center; border-radius:8px; font-size:24px; font-weight:bold; color:#111; }
+    .rank-tier[data-tier="S"] .rank-tier-label { background:#ff7b72; }
+    .rank-tier[data-tier="A"] .rank-tier-label { background:#f0a45c; }
+    .rank-tier[data-tier="B"] .rank-tier-label { background:#f7d154; }
+    .rank-tier[data-tier="C"] .rank-tier-label { background:#a6d96a; }
+    .rank-tier[data-tier="D"] .rank-tier-label { background:#7fb2e0; }
+    .rank-tier[data-tier="E"] .rank-tier-label { background:#b39ddb; }
+    .rank-pool .rank-tier-label { background:#3a3a4a; color:#ddd; font-size:14px; }
+    .rank-tier-zone { --tile-size:110px; flex:1; min-width:0; min-height:var(--tile-size); display:grid; grid-template-columns:repeat(7, 1fr); grid-auto-rows:var(--tile-size); gap:8px; padding:8px; align-content:start; border:1px dashed rgba(255,255,255,0.25); border-radius:10px; background:rgba(255,255,255,0.03); }
+    .rank-tier-zone.drag-over { border-color:#f0c040; background:rgba(240,192,64,0.08); }
+    .rank-tile { position:relative; width:100%; height:100%; border:2px solid rgba(255,255,255,0.35); border-radius:8px; overflow:hidden; box-sizing:border-box; cursor:grab; }
+    .rank-tile.dragging { opacity:0.4; border-style:dashed; }
+    .rank-tile-badge { position:absolute; left:2px; right:2px; bottom:2px; text-align:center; background:rgba(0,0,0,0.85); border:1px solid rgba(0,229,255,0.55); border-radius:4px; color:#00e5ff; font-weight:bold; font-size:12px; letter-spacing:1px; padding:1px 2px; line-height:1.15; font-family:Arial,sans-serif; }
   </style>
 </head>
 <body>
@@ -23,8 +40,9 @@
     <div id="zoomControls" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:row; gap:0; z-index:100000; align-items:center;">
       <button id="zoomOutBtn" title="Zoom out" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:none;border-radius:8px 0 0 8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">&minus;</button>
       <button id="zoomInBtn" title="Zoom in" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:none;border-radius:0;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;">+</button>
-      <button id="identifyBtn" title="Identify chunk" style="width:32px;height:48px;font-size:16px;font-weight:bold;border:none;border-radius:0;background:rgba(30,30,30,0.85);color:#888;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;">🔍</button>
-      <button id="undergroundBtn" title="Show underground/instance fairy rings" style="height:48px;padding:0 16px;font-size:13px;font-weight:bold;border:none;border-radius:0 8px 8px 0;background:rgba(30,30,30,0.85);color:#4a9eff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;white-space:nowrap;">Show underground/instance fairy rings</button>
+      <button id="identifyBtn" style="width:32px;height:48px;border:none;background:transparent;opacity:0;cursor:pointer;"></button>
+      <button id="undergroundBtn" title="Show underground fairy rings" style="height:48px;padding:0 16px;font-size:13px;font-weight:bold;border:none;border-radius:0;background:rgba(30,30,30,0.85);color:#4a9eff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;white-space:nowrap;">Show underground fairy rings</button>
+      <button id="rankBtn" title="Rank fairy rings" style="height:48px;padding:0 16px;font-size:13px;font-weight:bold;border:none;border-radius:0 8px 8px 0;background:rgba(30,30,30,0.85);color:#f0c040;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);border-left:1px solid rgba(255,255,255,0.1);transition:background 0.15s;white-space:nowrap;">Rank fairy rings</button>
     </div>
   </div>
 
@@ -34,6 +52,15 @@
       <button id="undergroundPopupClose" title="Close" style="position:absolute; top:10px; right:12px; width:36px; height:36px; font-size:18px; font-weight:bold; border:none; border-radius:8px; background:rgba(255,255,255,0.08); color:#ccc; cursor:pointer;">✕</button>
       <h2 style="margin:0 0 14px; color:#e8e8e8; font-size:32px; font-weight:bold; text-align:center; font-family:system-ui,Segoe UI,Arial;">Underground / Instance fairy rings</h2>
       <div id="undergroundPopupGrid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px;"></div>
+    </div>
+  </div>
+
+  <!-- Fairy ring tier list popup -->
+  <div id="rankPopup" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:100001; align-items:center; justify-content:center;">
+    <div style="background:#151528; border:1px solid #f0c040; border-radius:12px; padding:18px 20px; max-width:920px; width:94%; max-height:92vh; overflow-y:auto; position:relative; box-shadow:0 12px 50px rgba(0,0,0,0.7);">
+      <button id="rankPopupClose" title="Close" style="position:absolute; top:10px; right:12px; width:36px; height:36px; font-size:18px; font-weight:bold; border:none; border-radius:8px; background:rgba(255,255,255,0.08); color:#ccc; cursor:pointer;">✕</button>
+      <h2 style="margin:0 0 14px; color:#e8e8e8; font-size:42px; font-weight:bold; text-align:center; font-family:system-ui,Segoe UI,Arial;">Fairy ring tier list</h2>
+      <div id="rankTierList" style="display:flex; flex-direction:column; gap:8px;"></div>
     </div>
   </div>
 
@@ -160,7 +187,6 @@
         ctx.strokeRect(gi.colLefts[c], gi.rowTops[r], gi.colWidths[c], gi.rowHeights[r]);
       }
       drawFairyRingChunkLabels(ctx, gi);
-      // Underground row removed — replaced by the "Show underground/instance fairy rings" popup button
     }
 
     // Gray overlay for non-fairy-ring chunks
@@ -646,6 +672,171 @@
     });
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') undergroundPopup.style.display = 'none';
+    });
+
+    // === Fairy ring tier list (Rank fairy rings) popup ===
+    const RANK_STORAGE_KEY = 'fairyspecial.rankings.v1';
+    const RANK_TIERS = ['S', 'A', 'B', 'C', 'D', 'E'];
+
+    const rankBtn = document.getElementById('rankBtn');
+    const rankPopup = document.getElementById('rankPopup');
+    const rankPopupClose = document.getElementById('rankPopupClose');
+    const rankTierList = document.getElementById('rankTierList');
+
+    // Every rankable fairy ring. Surface rings use their chunk image;
+    // underground/instance rings use the existing underground image.
+    function buildRankItems() {
+      const items = [];
+      for (const [code, cfg] of Object.entries(FAIRY_RING_LOCATIONS)) {
+        items.push({ code, name: cfg.dest || code, img: 'static/chunks/' + cfg.chunkId + '.png' });
+      }
+      for (const code of UNDERGROUND_RINGS) {
+        items.push({ code, name: UNDERGROUND_LOCATIONS[code] || code, img: 'static/underground/' + code + '.png' });
+      }
+      // Fairy Resistance Hideout (reached via AIR -> DLR -> DJQ -> AJS)
+      items.push({ code: 'HIDEOUT', name: 'Fairy Resistance Hideout (AIR -> DLR -> DJQ -> AJS)', img: 'static/underground/HIDEOUT.png' });
+      items.sort((a, b) => a.code.localeCompare(b.code));
+      return items;
+    }
+
+    function makeRankTile(item) {
+      const tile = document.createElement('div');
+      tile.className = 'rank-tile';
+      tile.dataset.code = item.code;
+      tile.draggable = true;
+      tile.title = item.code + (item.name && item.name !== item.code ? ' - ' + item.name : '');
+      tile.style.background = '#0a0a12 url(' + item.img + ') center/cover no-repeat';
+      const badge = document.createElement('div');
+      badge.className = 'rank-tile-badge';
+      badge.textContent = item.code;
+      tile.appendChild(badge);
+      tile.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', item.code);
+        e.dataTransfer.effectAllowed = 'move';
+        tile.classList.add('dragging');
+      });
+      tile.addEventListener('dragend', () => tile.classList.remove('dragging'));
+      return tile;
+    }
+
+    function setupRankZone(zone) {
+      zone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        zone.classList.add('drag-over');
+      });
+      zone.addEventListener('dragleave', (e) => {
+        if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
+      });
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const code = e.dataTransfer.getData('text/plain');
+        const tile = rankTierList.querySelector('.rank-tile[data-code="' + code + '"]');
+        if (!tile) return;
+        // Insert at the drop position so rings can be ordered within a tier
+        const others = [...zone.querySelectorAll('.rank-tile')].filter(t => t !== tile);
+        let insertBefore = null;
+        for (const t of others) {
+          const r = t.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          if (e.clientY < cy || (e.clientY >= r.top && e.clientY <= r.bottom && e.clientX < cx)) {
+            insertBefore = t;
+            break;
+          }
+        }
+        if (insertBefore) zone.insertBefore(tile, insertBefore);
+        else zone.appendChild(tile);
+        saveRankings();
+      });
+    }
+
+    function saveRankings() {
+      const data = { tiers: {}, pool: [] };
+      for (const tier of RANK_TIERS) {
+        const zone = rankTierList.querySelector('.rank-tier[data-tier="' + tier + '"] .rank-tier-zone');
+        data.tiers[tier] = [...zone.querySelectorAll('.rank-tile')].map(t => t.dataset.code);
+      }
+      data.pool = [...rankTierList.querySelectorAll('#rankPool .rank-tile')].map(t => t.dataset.code);
+      try { localStorage.setItem(RANK_STORAGE_KEY, JSON.stringify(data)); } catch (err) {}
+    }
+
+    function loadRankings() {
+      try {
+        const data = JSON.parse(localStorage.getItem(RANK_STORAGE_KEY));
+        if (data && data.tiers) return data;
+      } catch (err) {}
+      return null;
+    }
+
+    function buildRankPopup() {
+      rankTierList.innerHTML = '';
+      const items = buildRankItems();
+      const tileByCode = {};
+      for (const item of items) tileByCode[item.code] = makeRankTile(item);
+
+      // Tier rows S..E
+      const zones = {};
+      for (const tier of RANK_TIERS) {
+        const row = document.createElement('div');
+        row.className = 'rank-tier';
+        row.dataset.tier = tier;
+        const label = document.createElement('div');
+        label.className = 'rank-tier-label';
+        label.textContent = tier;
+        const zone = document.createElement('div');
+        zone.className = 'rank-tier-zone';
+        row.appendChild(label);
+        row.appendChild(zone);
+        rankTierList.appendChild(row);
+        zones[tier] = zone;
+        setupRankZone(zone);
+      }
+
+      // Unranked pool row
+      const poolRow = document.createElement('div');
+      poolRow.className = 'rank-tier rank-pool';
+      const poolLabel = document.createElement('div');
+      poolLabel.className = 'rank-tier-label';
+      poolLabel.textContent = '-';
+      const poolZone = document.createElement('div');
+      poolZone.className = 'rank-tier-zone';
+      poolZone.id = 'rankPool';
+      poolRow.appendChild(poolLabel);
+      poolRow.appendChild(poolZone);
+      rankTierList.appendChild(poolRow);
+      setupRankZone(poolZone);
+
+      // Restore saved layout, or leave everything in the pool
+      const saved = loadRankings();
+      const placed = new Set();
+      if (saved) {
+        for (const tier of RANK_TIERS) {
+          for (const code of (saved.tiers[tier] || [])) {
+            if (tileByCode[code]) { zones[tier].appendChild(tileByCode[code]); placed.add(code); }
+          }
+        }
+        for (const code of (saved.pool || [])) {
+          if (tileByCode[code]) { poolZone.appendChild(tileByCode[code]); placed.add(code); }
+        }
+      }
+      for (const item of items) {
+        if (!placed.has(item.code)) poolZone.appendChild(tileByCode[item.code]);
+      }
+    }
+
+    rankBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      buildRankPopup();
+      rankPopup.style.display = 'flex';
+    });
+    rankPopupClose.addEventListener('click', () => { rankPopup.style.display = 'none'; });
+    rankPopup.addEventListener('click', (e) => {
+      if (e.target === rankPopup) rankPopup.style.display = 'none';
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') rankPopup.style.display = 'none';
     });
 
     async function initMap() {
