@@ -378,8 +378,6 @@
       const MAX_Y = 4160;
       const X_CORRECTION = -6;
       const FAIRY_RING_ICON_SHIFT_X = 27; // px, must match placeFairyRingMarker in static/index.js (HD map built-in travel icon alignment)
-      // Exception chunk (fully unchanged behavior: centered label, no leader line)
-      const EXCEPTION_CHUNKS = new Set(['10,32']);
       // Per-chunk label overrides:
       //  - {dx, dy}: direction from ring to label (close placement)
       //  - {center: true}: label centered in the chunk, but keep the leader line
@@ -388,6 +386,7 @@
       const DIRECTION_OVERRIDES = {
         '8,27': { dx: 1, dy: 1 },                // Kurask boss top-right -> label bottom-right of the ring
         '7,6': { center: true },                 // DJR -> centered label + diagonal leader line to the box center
+        '10,32': { center: true },               // DKR -> centered label + leader line to the box center
         '15,32': { leftCenter: true, offsetX: 20, offsetY: 25 }, // DIS -> left side, nudged a bit toward bottom-right
         '16,34': { leftCenter: true, offsetX: 45, offsetY: 45 }, // BIQ -> left-middle, nudged toward bottom-right (closer to the ring)
         '17,21': { dx: 1, dy: -1, offsetX: -45 } // BKP -> shift left, clear of the Smoke Devil boss
@@ -417,7 +416,7 @@
         const boxW = maxWidth + padX * 2;
         const boxH = totalHeight + padY * 2;
 
-        // Default: centered box (used for the exception chunk)
+        // Default: centered box (used when there is no ring location data)
         let boxX = chunkX + (chunkW - boxW) / 2;
         let boxY = chunkY + (chunkH - boxH) / 2;
 
@@ -435,8 +434,7 @@
           anchorCount++;
         }
 
-        const isException = EXCEPTION_CHUNKS.has(key);
-        if (!isException && anchorCount > 0) {
+        if (anchorCount > 0) {
           // Direction decision uses the UNSHIFTED ring position (unchanged behavior);
           // the leader line + label box follow the shifted icon (matching placeFairyRingMarker).
           const rawIconX = anchorX / anchorCount;
