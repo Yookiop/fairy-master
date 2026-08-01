@@ -1,39 +1,41 @@
 // Boss images configuration and plotting API
 const CODE_CONFIGURED_BOSS_IMAGES = Object.freeze({
-    'Bryophyta': {
-        fileName: 'Bryophyta.png',
-        chunkIds: ['chunk_10_32']
-    },'Scurrius': {
-        fileName: 'Scurrius.png',
-        chunkIds: ['chunk_10_32']
-    },
-    'Obor': {
-        fileName: 'Obor.png',
-        chunkIds: ['chunk_10_32']
-    },'Lizardman Shaman': {
-        fileName: 'Lizardman_shaman.png',
+    //'Bryophyta': {
+    //    fileName: 'Bryophyta.png',
+    //    chunkIds: ['chunk_10_32']
+    //},'Scurrius': {
+    //    fileName: 'Scurrius.png',
+    //    chunkIds: ['chunk_10_32']
+    //},
+    //'Obor': {
+    //    fileName: 'Obor.png',
+    //    chunkIds: ['chunk_10_32']
+    //},
+    'Lizardman Shaman': {
+        fileName: 'Lizardman_shaman_temp.png',
         chunkIds: ['chunk_7_6']
     },
     'Yama': {
         fileName: 'Yama.png',
         chunkIds: ['chunk_7_6']
-    },
-    'Kalphite Queen': {
-        fileName: 'Kalphite_Queen.png',
-        chunkIds: ['chunk_16_34']
-    },
-    'Kurask': {
-        fileName: 'Kurask.png',
-        chunkIds: ['chunk_8_27']
-    },
-    'Leviathan': {
-        fileName: 'The_Leviathan.png',
-        chunkIds: ['chunk_15_32']
-    },
-    'Thermonuclear Smoke Devil': {
-        fileName: 'Thermonuclear_smoke_devil.png',
-        chunkIds: ['chunk_17_21']
     }
+    //,
+    //'Kalphite Queen': {
+    //    fileName: 'Kalphite_Queen.png',
+    //    chunkIds: ['chunk_16_34']
+    //},
+    //'Kurask': {
+    //    fileName: 'Kurask.png',
+    //    chunkIds: ['chunk_8_27']
+    //},
+    //'Leviathan': {
+    //    fileName: 'The_Leviathan.png',
+    //    chunkIds: ['chunk_15_32']
+    //},
+    //'Thermonuclear Smoke Devil': {
+    //    fileName: 'Thermonuclear_smoke_devil.png',
+    //    chunkIds: ['chunk_17_21']
+    //}
 });
 
 // Fairy ring locations - world map travel icons
