@@ -61,10 +61,10 @@
           <span class="rank-legend-box" data-tier="F">F</span>
         </span>
       </button>
-      <button id="undergroundBtn" title="Show underground fairy rings" style="height:48px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#00e5ff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">Show underground fairy rings</button>
+      <button id="undergroundBtn" style="height:48px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#00e5ff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">Show underground fairy rings</button>
     </div>
-    <!-- Invisible chunk-identify button, moved to the top-right corner, separate from the toolbar -->
-    <button id="identifyBtn" style="position:fixed; top:10px; right:10px; width:32px; height:48px; z-index:100000; border:none; background:transparent; opacity:0; cursor:pointer;"></button>
+    <!-- Chunk-identify info button, top-right corner, separate from the toolbar -->
+    <button id="identifyBtn" title="Toggle chunk IDs. Click a chunk ID to make it the map's centre when opening." style="position:fixed; top:10px; right:10px; width:34px; height:34px; z-index:100000; border:2px solid rgba(255,255,255,0.45); border-radius:50%; background:rgba(30,30,30,0.85); color:#e8e8e8; font-size:17px; font-weight:bold; font-style:italic; font-family:Georgia,serif; cursor:pointer; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); transition:background 0.15s;">i</button>
   </div>
 
   <!-- Underground / instance fairy rings popup -->
@@ -415,7 +415,7 @@
       ctx.closePath();
     }
 
-    // Fairy ring chunk labels (cyan on black, visible at any zoom)
+    // Fairy ring chunk labels (black box, text color follows the tier/border color, visible at any zoom)
     const FAIRY_CHUNKS = {
       '4,9':'CIS','4,23':'AJS\nCIP','6,4':'CIR','6,26':'DKS','7,6':'DJR',
       '8,20':'AKQ','8,23':'ALP','8,27':'AJR','9,12':'AKR','9,26':'CJR',
@@ -588,8 +588,9 @@
         ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
         ctx.fill();
 
-        // Cyan text
-        ctx.fillStyle = '#00e5ff';
+        // Code text color follows the tier (same logic as the chunk border):
+        // tier color when the ring is ranked, cyan when unranked.
+        ctx.fillStyle = fairyChunkBorderColor(key);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const textCX = boxX + boxW / 2;
@@ -647,6 +648,45 @@
       }
     }
 
+    // The user's chosen startup centre (used when the map opens).
+    const CENTER_STORAGE_KEY = 'fairyspecial.center.v1';
+    function loadSavedCenter() {
+      try {
+        const d = JSON.parse(localStorage.getItem(CENTER_STORAGE_KEY));
+        if (d && typeof d.row === 'number' && typeof d.col === 'number') return d;
+      } catch (e) {}
+      return null;
+    }
+    function saveCenter(row, col) {
+      try { localStorage.setItem(CENTER_STORAGE_KEY, JSON.stringify({ row, col })); } catch (e) {}
+    }
+
+    // Identify mode: clicking (no real drag) a chunk makes it the map's centre AND
+    // stores it as the startup centre for the next time the map opens. Called from
+    // the mouseup handler because preventDefault on mousedown (needed for panning)
+    // can suppress the browser's click event.
+    function centerOnChunkAt(clientX, clientY) {
+      const gi = window._gridInfo;
+      if (!gi) return;
+      const rect = fullMap.getBoundingClientRect();
+      const mx = (clientX - rect.left - currentTX) / currentScale;
+      const my = (clientY - rect.top - currentTY) / currentScale;
+      let r = -1, c = -1;
+      for (let i = 0; i < gi.rowTops.length; i++) {
+        if (my >= gi.rowTops[i] && my <= gi.rowTops[i] + gi.rowHeights[i]) { r = i; break; }
+      }
+      for (let j = 0; j < gi.colLefts.length; j++) {
+        if (mx >= gi.colLefts[j] && mx <= gi.colLefts[j] + gi.colWidths[j]) { c = j; break; }
+      }
+      if (r < 0 || c < 0) return;
+      saveCenter(r, c); // this chunk becomes the startup centre on the next map open
+      const cx = gi.colLefts[c] + gi.colWidths[c] / 2;
+      const cy = gi.rowTops[r] + gi.rowHeights[r] / 2;
+      currentTX = rect.width / 2 - cx * currentScale;
+      currentTY = rect.height / 2 - cy * currentScale;
+      applyTransform();
+    }
+
     fullMap.addEventListener('wheel', (e) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
@@ -663,17 +703,22 @@
     }, { passive: false });
 
     let isPanning = false, panStartX, panStartY, panStartTX, panStartTY;
+    let panMoved = false; // becomes true once the pointer really drags (>3px)
     let panTimer = null; // throttle transform updates to ~60 fps
     fullMap.addEventListener('mousedown', (e) => {
       if (e.target.closest && e.target.closest('#zoomControls')) return;
+      if (e.target.closest && e.target.closest('#identifyBtn')) return; // don't pan from the identify toggle
       if (e.button !== 0) return; // only left mouse button pans; right-click drag is disabled
       e.preventDefault();
-      isPanning = true; panStartX = e.clientX; panStartY = e.clientY;
+      isPanning = true; panMoved = false;
+      panStartX = e.clientX; panStartY = e.clientY;
       panStartTX = currentTX; panStartTY = currentTY;
       fullMap.style.cursor = 'grabbing';
     });
     window.addEventListener('mousemove', (e) => {
       if (!isPanning) return;
+      if (!panMoved && Math.hypot(e.clientX - panStartX, e.clientY - panStartY) > 3) panMoved = true;
+      if (!panMoved) return; // don't pan until the drag really starts (avoids jitter on a click)
       currentTX = panStartTX + (e.clientX - panStartX);
       currentTY = panStartTY + (e.clientY - panStartY);
       if (panTimer !== null) return; // at most one transform update per ~16ms
@@ -682,11 +727,17 @@
         applyTransform();
       }, 16);
     });
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
+      const wasPanning = isPanning;
       if (isPanning) applyTransform(); // snap to final position on release
       isPanning = false;
       fullMap.style.cursor = '';
       if (panTimer !== null) { clearTimeout(panTimer); panTimer = null; }
+      // Identify mode + click (small movement, not a real drag): make the clicked chunk
+      // the centre and store it as the startup centre for the next map open.
+      if (wasPanning && identifyMode && Math.hypot(e.clientX - panStartX, e.clientY - panStartY) < 10) {
+        centerOnChunkAt(e.clientX, e.clientY);
+      }
     });
 
     // === Underground / instance fairy rings popup ===
@@ -940,16 +991,25 @@
         const code = e.dataTransfer.getData('text/plain');
         const tile = rankTierList.querySelector('.rank-tile[data-code="' + code + '"]');
         if (!tile) return;
-        // Insert at the drop position so rings can be ordered within a tier
-        const others = [...zone.querySelectorAll('.rank-tile')].filter(t => t !== tile);
         let insertBefore = null;
-        for (const t of others) {
-          const r = t.getBoundingClientRect();
-          const cx = r.left + r.width / 2;
-          const cy = r.top + r.height / 2;
-          if (e.clientY < cy || (e.clientY >= r.top && e.clientY <= r.bottom && e.clientX < cx)) {
-            insertBefore = t;
-            break;
+        if (zone.id === 'rankPool') {
+          // The pool stays alphabetically sorted: dropping a tile back into it
+          // automatically finds the right spot by code (no manual searching).
+          const others = [...zone.querySelectorAll('.rank-tile')].filter(t => t !== tile);
+          for (const t of others) {
+            if (code.localeCompare(t.dataset.code) < 0) { insertBefore = t; break; }
+          }
+        } else {
+          // Tiers keep the drop position so rings can be ordered within a tier
+          const others = [...zone.querySelectorAll('.rank-tile')].filter(t => t !== tile);
+          for (const t of others) {
+            const r = t.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            if (e.clientY < cy || (e.clientY >= r.top && e.clientY <= r.bottom && e.clientX < cx)) {
+              insertBefore = t;
+              break;
+            }
           }
         }
         if (insertBefore) zone.insertBefore(tile, insertBefore);
@@ -1210,14 +1270,17 @@
       const gi = window._gridInfo;
       if (gi) {
         // Startup zoom: fit a ~START_SPAN_COLS x START_SPAN_ROWS chunk band into the viewport,
-        // centered on chunk (DEFAULT_CENTER_ROW, DEFAULT_CENTER_COL) so the map starts zoomed in
-        // at the level shown in the pasted screenshot instead of showing the whole map.
-        const colW = gi.colWidths[DEFAULT_CENTER_COL] || baseTileW;
-        const rowH = gi.rowHeights[DEFAULT_CENTER_ROW] || baseTileH;
+        // centered on the user's chosen chunk (saved via the chunk-ID click) or the default
+        // (DEFAULT_CENTER_ROW/COL) so the map starts zoomed in instead of showing the whole map.
+        const savedCenter = loadSavedCenter();
+        const centerRow = savedCenter ? savedCenter.row : DEFAULT_CENTER_ROW;
+        const centerCol = savedCenter ? savedCenter.col : DEFAULT_CENTER_COL;
+        const colW = gi.colWidths[centerCol] || baseTileW;
+        const rowH = gi.rowHeights[centerRow] || baseTileH;
         currentScale = Math.min(rect.width / (START_SPAN_COLS * colW), rect.height / (START_SPAN_ROWS * rowH));
         currentScale = Math.max(minScale, Math.min(maxScale, currentScale));
-        const cx = gi.colLefts[DEFAULT_CENTER_COL] + gi.colWidths[DEFAULT_CENTER_COL] / 2;
-        const cy = gi.rowTops[DEFAULT_CENTER_ROW] + gi.rowHeights[DEFAULT_CENTER_ROW] / 2;
+        const cx = gi.colLefts[centerCol] + gi.colWidths[centerCol] / 2;
+        const cy = gi.rowTops[centerRow] + gi.rowHeights[centerRow] / 2;
         currentTX = rect.width / 2 - cx * currentScale;
         currentTY = rect.height / 2 - cy * currentScale;
       } else {
