@@ -16,22 +16,20 @@
     #rankTierList { font-family:system-ui,Segoe UI,Arial; }
     .rank-tier { display:flex; align-items:stretch; gap:10px; }
     .rank-tier-label { width:56px; min-width:56px; display:flex; align-items:center; justify-content:center; border-radius:8px; font-size:24px; font-weight:bold; color:#111; }
-    .rank-tier[data-tier="S"] .rank-tier-label { background:#ff7b72; }
+    .rank-tier[data-tier="S"] .rank-tier-label { background:#ff1a1a; }
     .rank-tier[data-tier="A"] .rank-tier-label { background:#f0a45c; }
     .rank-tier[data-tier="B"] .rank-tier-label { background:#ffe000; }
     .rank-tier[data-tier="C"] .rank-tier-label { background:#a6d96a; }
     .rank-tier[data-tier="D"] .rank-tier-label { background:#3b82c4; }
-    .rank-tier[data-tier="E"] .rank-tier-label { background:#a855f7; }
-    .rank-tier[data-tier="F"] .rank-tier-label { background:#ff69b4; }
+    .rank-tier[data-tier="F"] .rank-tier-label { background:#a855f7; }
     /* Legend: tier color boxes shown inside the toolbar button */
     .rank-legend-box { width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; color:#111; }
-    .rank-legend-box[data-tier="S"] { background:#ff7b72; }
+    .rank-legend-box[data-tier="S"] { background:#ff1a1a; }
     .rank-legend-box[data-tier="A"] { background:#f0a45c; }
     .rank-legend-box[data-tier="B"] { background:#ffe000; }
     .rank-legend-box[data-tier="C"] { background:#a6d96a; }
     .rank-legend-box[data-tier="D"] { background:#3b82c4; }
-    .rank-legend-box[data-tier="E"] { background:#a855f7; }
-    .rank-legend-box[data-tier="F"] { background:#ff69b4; }
+    .rank-legend-box[data-tier="F"] { background:#a855f7; }
     .rank-pool .rank-tier-label { background:#3a3a4a; color:#ddd; font-size:14px; }
     .rank-tier-zone { --tile-size:110px; flex:1; min-width:0; min-height:var(--tile-size); display:grid; grid-template-columns:repeat(7, 1fr); grid-auto-rows:var(--tile-size); gap:8px; padding:8px; align-content:start; border:1px dashed rgba(255,255,255,0.25); border-radius:10px; background:rgba(255,255,255,0.03); }
     .rank-tier-zone.drag-over { border-color:#f0c040; background:rgba(240,192,64,0.08); }
@@ -52,8 +50,7 @@
     <div id="zoomControls" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:row; gap:0; z-index:100000; align-items:center;">
       <button id="zoomOutBtn" title="Zoom out" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-right:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">&minus;</button>
       <button id="zoomInBtn" title="Zoom in" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-left:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">+</button>
-      <button id="undergroundBtn" title="Show underground fairy rings" style="height:48px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;margin-left:32px;margin-right:32px;background:rgba(30,30,30,0.85);color:#00e5ff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">Show underground fairy rings</button>
-      <button id="rankBtn" title="Fairy ring tier list" style="height:auto;padding:7px 14px;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#e8e8e8;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">
+      <button id="rankBtn" title="Fairy ring tier list" style="height:auto;padding:7px 14px;border:2px solid rgba(255,255,255,0.45);border-radius:8px;margin-left:32px;margin-right:32px;background:rgba(30,30,30,0.85);color:#e8e8e8;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">
         <span style="font-size:17px;font-weight:bold;">Open tier list</span>
         <span style="display:flex;gap:4px;">
           <span class="rank-legend-box" data-tier="S">S</span>
@@ -61,10 +58,10 @@
           <span class="rank-legend-box" data-tier="B">B</span>
           <span class="rank-legend-box" data-tier="C">C</span>
           <span class="rank-legend-box" data-tier="D">D</span>
-          <span class="rank-legend-box" data-tier="E">E</span>
           <span class="rank-legend-box" data-tier="F">F</span>
         </span>
       </button>
+      <button id="undergroundBtn" title="Show underground fairy rings" style="height:48px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#00e5ff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">Show underground fairy rings</button>
     </div>
     <!-- Invisible chunk-identify button, moved to the top-right corner, separate from the toolbar -->
     <button id="identifyBtn" style="position:fixed; top:10px; right:10px; width:32px; height:48px; z-index:100000; border:none; background:transparent; opacity:0; cursor:pointer;"></button>
@@ -677,8 +674,12 @@
 
     function makeUndergroundCard(code, location, imageFile, extraCodes) {
       const card = document.createElement('div');
-      // Square tile filled with the location's map image (from the wiki)
-      card.style.cssText = 'position:relative; aspect-ratio:1/1; box-sizing:border-box; border:2px solid #4a9eff; border-radius:10px; overflow:hidden; background:#0a0a12 url(static/underground/' + imageFile + '.png) center/cover no-repeat;';
+      // Square tile filled with the location's map image (from the wiki).
+      // Border: cyan by default; the tier color if the ring (or HIDEOUT) is ranked.
+      const rankCode = code || 'HIDEOUT';
+      const tier = tierOfCode(rankCode);
+      const borderColor = tier ? TIER_COLORS[tier] : DEFAULT_FAIRY_BORDER;
+      card.style.cssText = 'position:relative; aspect-ratio:1/1; box-sizing:border-box; border:2px solid ' + borderColor + '; border-radius:10px; overflow:hidden; background:#0a0a12 url(static/underground/' + imageFile + '.png) center/cover no-repeat;';
 
       // Location text line attached to the top of the tile
       const loc = document.createElement('div');
@@ -725,18 +726,17 @@
 
     // === Fairy ring tier list (Rank fairy rings) popup ===
     const RANK_STORAGE_KEY = 'fairyspecial.rankings.v1';
-    const RANK_TIERS = ['S', 'A', 'B', 'C', 'D', 'E', 'F'];
+    const RANK_TIERS = ['S', 'A', 'B', 'C', 'D', 'F'];
 
     // Tier colors — same as the tier label backgrounds. Used for the legend and
     // for tinting a ranked fairy ring chunk's border on the map.
     const TIER_COLORS = {
-      S: '#ff7b72',
+      S: '#ff1a1a',
       A: '#f0a45c',
       B: '#ffe000',
       C: '#a6d96a',
       D: '#3b82c4',
-      E: '#a855f7',
-      F: '#ff69b4'
+      F: '#a855f7'
     };
     const DEFAULT_FAIRY_BORDER = '#00e5ff'; // unranked fairy ring chunk border (cyan)
 
