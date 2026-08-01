@@ -227,13 +227,53 @@
       }
       // Border around every chunk that contains a fairy ring (slightly thicker than the grid).
       // Default cyan; chunks whose rings are ranked in the tier list get the tier color.
+      // Edges shared with ANOTHER fairy chunk become a DASHED line whose blocks alternate
+      // between the two chunks' colors (a passable border, no force-blockade).
       ctx.lineWidth = 6.58845; // another +10%: 5.9895 -> 6.58845
+      ctx.lineCap = 'butt';
+      const DASH = 12; // dash + gap length for shared-edge stippel lines
+      const drawSeg = (x1, y1, x2, y2, color) => {
+        ctx.strokeStyle = color;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      };
+      // Dashed edge: offset 0 = first block in this chunk's color; offset DASH draws the
+      // interleaved phase, so the neighbour's complementary stroke fills the gaps between
+      // this chunk's blocks -> the shared edge alternates between both colors.
+      const drawDashed = (x1, y1, x2, y2, color, offset) => {
+        ctx.strokeStyle = color;
+        ctx.setLineDash([DASH, DASH]);
+        ctx.lineDashOffset = offset;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      };
       for (const key of Object.keys(FAIRY_CHUNKS)) {
         const [r, c] = key.split(',').map(Number);
         if (r >= gi.rowTops.length || c >= gi.colLefts.length) continue;
-        ctx.strokeStyle = fairyChunkBorderColor(key);
-        ctx.strokeRect(gi.colLefts[c], gi.rowTops[r], gi.colWidths[c], gi.rowHeights[r]);
+        const x = gi.colLefts[c], y = gi.rowTops[r];
+        const w = gi.colWidths[c], h = gi.rowHeights[r];
+        const fairyAt = (rr, cc) => rr >= 0 && cc >= 0 && rr < gi.rowTops.length && cc < gi.colLefts.length && FAIRY_CHUNKS[`${rr},${cc}`] !== undefined;
+        const color = fairyChunkBorderColor(key);
+        const left = fairyAt(r, c - 1), right = fairyAt(r, c + 1), top = fairyAt(r - 1, c), bottom = fairyAt(r + 1, c);
+        // Top edge: solid full, or dashed (this chunk is the BOTTOM one -> offset DASH)
+        if (top) drawDashed(x, y, x + w, y, color, DASH);
+        else drawSeg(x, y, x + w, y, color);
+        // Bottom edge: solid full, or dashed (this chunk is the TOP one -> offset 0)
+        if (bottom) drawDashed(x, y + h, x + w, y + h, color, 0);
+        else drawSeg(x, y + h, x + w, y + h, color);
+        // Left edge: solid full, or dashed (this chunk is the RIGHT one -> offset DASH)
+        if (left) drawDashed(x, y, x, y + h, color, DASH);
+        else drawSeg(x, y, x, y + h, color);
+        // Right edge: solid full, or dashed (this chunk is the LEFT one -> offset 0)
+        if (right) drawDashed(x + w, y, x + w, y + h, color, 0);
+        else drawSeg(x + w, y, x + w, y + h, color);
       }
+      ctx.setLineDash([]); // reset for any later drawing (labels etc.)
       drawFairyRingChunkLabels(ctx, gi);
     }
 
