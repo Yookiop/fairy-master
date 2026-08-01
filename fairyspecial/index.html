@@ -294,7 +294,7 @@
       }
     }
 
-    // Underground row with proper boxes and Fairy Resistance Hideout
+    // Underground row with proper boxes and Fairy Hideout
     const UNDERGROUND_RINGS = [
       'ALR','BKS','BLP','DIP','DLP','AJQ','BJR','BKQ','CKP','DIQ','DIR','DLS','BLQ'
     ];
@@ -325,12 +325,12 @@
       ctx.fillText('Underground / Instance fairy rings', 10, sepY + 20);
       
       const allRings = UNDERGROUND_RINGS.map(code => ({ type: 'ring', code, color: '#4a9eff' }));
-      // Fairy Resistance Hideout is first box
+      // Fairy Hideout is first box
       const bw = colW - 6;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // === Fairy Resistance Hideout (first box) ===
+      // === Fairy Hideout (first box) ===
       {
         const cx = gi.colLefts[0] + gi.colWidths[0] / 2;
         const bx = cx - bw/2;
@@ -794,8 +794,8 @@
 
     function buildUndergroundPopup() {
       undergroundPopupGrid.innerHTML = '';
-      // 1. Fairy Resistance Hideout (sequence: AIR -> DLR -> DJQ -> AJS)
-      undergroundPopupGrid.appendChild(makeUndergroundCard('', 'Fairy Resistance Hideout', 'HIDEOUT', ['AIR', 'DLR', 'DJQ', 'AJS']));
+      // 1. Fairy Hideout (sequence: AIR -> DLR -> DJQ -> AJS)
+      undergroundPopupGrid.appendChild(makeUndergroundCard('', 'Fairy Hideout', 'HIDEOUT', ['AIR', 'DLR', 'DJQ', 'AJS']));
       // 2. All other underground rings
       for (const code of UNDERGROUND_RINGS) {
         undergroundPopupGrid.appendChild(makeUndergroundCard(code, UNDERGROUND_LOCATIONS[code] || code, code));
@@ -940,8 +940,8 @@
       for (const code of UNDERGROUND_RINGS) {
         items.push({ code, name: UNDERGROUND_LOCATIONS[code] || code, img: 'static/underground/' + code + '.png', kind: 'underground' });
       }
-      // Fairy Resistance Hideout (reached via AIR -> DLR -> DJQ -> AJS)
-      items.push({ code: 'HIDEOUT', name: 'Fairy Resistance Hideout (AIR -> DLR -> DJQ -> AJS)', img: 'static/underground/HIDEOUT.png', kind: 'underground' });
+      // Fairy Hideout (reached via AIR -> DLR -> DJQ -> AJS)
+      items.push({ code: 'HIDEOUT', name: 'Fairy Hideout (AIR -> DLR -> DJQ -> AJS)', img: 'static/underground/HIDEOUT.png', kind: 'underground' });
       items.sort((a, b) => a.code.localeCompare(b.code));
       return items;
     }

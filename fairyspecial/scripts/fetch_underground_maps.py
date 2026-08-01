@@ -5,7 +5,7 @@ underground / instance fairy ring, downloads them and composes a 200x200 PNG per
 ring (matching the wiki's rendering). DIQ (Player-owned house superior garden)
 uses an illustration instead of map tiles.
 
-Output: static/underground/{CODE}.png  (+ HIDEOUT.png for the Fairy Resistance Hideout)
+Output: static/underground/{CODE}.png  (+ HIDEOUT.png for the Fairy Hideout)
 
 Requires Pillow. Usage:
     python scripts/fetch_underground_maps.py
@@ -175,7 +175,7 @@ def main():
 
     ok, fail = [], []
 
-    # 1. Fairy Resistance Hideout (Sequences row)
+    # 1. Fairy Hideout (Sequences row)
     hideout_row = find_hideout_row(sections)
     if hideout_row:
         tiles = extract_map_tiles(hideout_row)
