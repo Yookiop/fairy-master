@@ -18,11 +18,20 @@
     .rank-tier-label { width:56px; min-width:56px; display:flex; align-items:center; justify-content:center; border-radius:8px; font-size:24px; font-weight:bold; color:#111; }
     .rank-tier[data-tier="S"] .rank-tier-label { background:#ff7b72; }
     .rank-tier[data-tier="A"] .rank-tier-label { background:#f0a45c; }
-    .rank-tier[data-tier="B"] .rank-tier-label { background:#f7d154; }
+    .rank-tier[data-tier="B"] .rank-tier-label { background:#ffe000; }
     .rank-tier[data-tier="C"] .rank-tier-label { background:#a6d96a; }
-    .rank-tier[data-tier="D"] .rank-tier-label { background:#7fb2e0; }
-    .rank-tier[data-tier="E"] .rank-tier-label { background:#b39ddb; }
-    .rank-tier[data-tier="F"] .rank-tier-label { background:#a855f7; }
+    .rank-tier[data-tier="D"] .rank-tier-label { background:#3b82c4; }
+    .rank-tier[data-tier="E"] .rank-tier-label { background:#a855f7; }
+    .rank-tier[data-tier="F"] .rank-tier-label { background:#ff69b4; }
+    /* Legend: tier color boxes shown inside the toolbar button */
+    .rank-legend-box { width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:bold; color:#111; }
+    .rank-legend-box[data-tier="S"] { background:#ff7b72; }
+    .rank-legend-box[data-tier="A"] { background:#f0a45c; }
+    .rank-legend-box[data-tier="B"] { background:#ffe000; }
+    .rank-legend-box[data-tier="C"] { background:#a6d96a; }
+    .rank-legend-box[data-tier="D"] { background:#3b82c4; }
+    .rank-legend-box[data-tier="E"] { background:#a855f7; }
+    .rank-legend-box[data-tier="F"] { background:#ff69b4; }
     .rank-pool .rank-tier-label { background:#3a3a4a; color:#ddd; font-size:14px; }
     .rank-tier-zone { --tile-size:110px; flex:1; min-width:0; min-height:var(--tile-size); display:grid; grid-template-columns:repeat(7, 1fr); grid-auto-rows:var(--tile-size); gap:8px; padding:8px; align-content:start; border:1px dashed rgba(255,255,255,0.25); border-radius:10px; background:rgba(255,255,255,0.03); }
     .rank-tier-zone.drag-over { border-color:#f0c040; background:rgba(240,192,64,0.08); }
@@ -44,7 +53,18 @@
       <button id="zoomOutBtn" title="Zoom out" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-right:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">&minus;</button>
       <button id="zoomInBtn" title="Zoom in" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-left:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">+</button>
       <button id="undergroundBtn" title="Show underground fairy rings" style="height:48px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;margin-left:32px;margin-right:32px;background:rgba(30,30,30,0.85);color:#00e5ff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">Show underground fairy rings</button>
-      <button id="rankBtn" title="Fairy ring tier list" style="height:48px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#ffd700;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">Fairy ring tier list</button>
+      <button id="rankBtn" title="Fairy ring tier list" style="height:auto;padding:7px 14px;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#e8e8e8;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">
+        <span style="font-size:17px;font-weight:bold;">Open tier list</span>
+        <span style="display:flex;gap:4px;">
+          <span class="rank-legend-box" data-tier="S">S</span>
+          <span class="rank-legend-box" data-tier="A">A</span>
+          <span class="rank-legend-box" data-tier="B">B</span>
+          <span class="rank-legend-box" data-tier="C">C</span>
+          <span class="rank-legend-box" data-tier="D">D</span>
+          <span class="rank-legend-box" data-tier="E">E</span>
+          <span class="rank-legend-box" data-tier="F">F</span>
+        </span>
+      </button>
     </div>
     <!-- Invisible chunk-identify button, moved to the top-right corner, separate from the toolbar -->
     <button id="identifyBtn" style="position:fixed; top:10px; right:10px; width:32px; height:48px; z-index:100000; border:none; background:transparent; opacity:0; cursor:pointer;"></button>
@@ -208,12 +228,13 @@
         const x = c < gi.colLefts.length ? gi.colLefts[c] : (gi.colLefts[gi.colLefts.length - 1] + gi.colWidths[gi.colWidths.length - 1]);
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, gridBottom); ctx.stroke();
       }
-      // Green border around every chunk that contains a fairy ring (slightly thicker than the grid)
-      ctx.strokeStyle = 'rgba(46,204,113,1)';
-      ctx.lineWidth = 5.9895; // another +10%: 5.445 -> 5.9895 (was 4.5 originally)
+      // Border around every chunk that contains a fairy ring (slightly thicker than the grid).
+      // Default cyan; chunks whose rings are ranked in the tier list get the tier color.
+      ctx.lineWidth = 6.58845; // another +10%: 5.9895 -> 6.58845
       for (const key of Object.keys(FAIRY_CHUNKS)) {
         const [r, c] = key.split(',').map(Number);
         if (r >= gi.rowTops.length || c >= gi.colLefts.length) continue;
+        ctx.strokeStyle = fairyChunkBorderColor(key);
         ctx.strokeRect(gi.colLefts[c], gi.rowTops[r], gi.colWidths[c], gi.rowHeights[r]);
       }
       drawFairyRingChunkLabels(ctx, gi);
@@ -706,6 +727,42 @@
     const RANK_STORAGE_KEY = 'fairyspecial.rankings.v1';
     const RANK_TIERS = ['S', 'A', 'B', 'C', 'D', 'E', 'F'];
 
+    // Tier colors — same as the tier label backgrounds. Used for the legend and
+    // for tinting a ranked fairy ring chunk's border on the map.
+    const TIER_COLORS = {
+      S: '#ff7b72',
+      A: '#f0a45c',
+      B: '#ffe000',
+      C: '#a6d96a',
+      D: '#3b82c4',
+      E: '#a855f7',
+      F: '#ff69b4'
+    };
+    const DEFAULT_FAIRY_BORDER = '#00e5ff'; // unranked fairy ring chunk border (cyan)
+
+    // The tier a fairy ring code is currently ranked in (from saved rankings), or null.
+    function tierOfCode(code) {
+      const data = loadRankings();
+      if (!data || !data.tiers) return null;
+      for (const tier of RANK_TIERS) {
+        if ((data.tiers[tier] || []).includes(code)) return tier;
+      }
+      return null;
+    }
+
+    // Border color for a fairy ring chunk: the highest-ranked tier among its rings,
+    // else the default cyan. Used by drawGrid.
+    function fairyChunkBorderColor(key) {
+      const codes = (FAIRY_CHUNKS[key] || '').split('\n');
+      let best = null;
+      for (const code of codes) {
+        const t = tierOfCode(code);
+        if (!t) continue;
+        if (best === null || RANK_TIERS.indexOf(t) < RANK_TIERS.indexOf(best)) best = t;
+      }
+      return best ? TIER_COLORS[best] : DEFAULT_FAIRY_BORDER;
+    }
+
     const rankBtn = document.getElementById('rankBtn');
     const rankPopup = document.getElementById('rankPopup');
     const rankPopupClose = document.getElementById('rankPopupClose');
@@ -869,6 +926,7 @@
       }
       data.pool = [...rankTierList.querySelectorAll('#rankPool .rank-tile')].map(t => t.dataset.code);
       try { localStorage.setItem(RANK_STORAGE_KEY, JSON.stringify(data)); } catch (err) {}
+      drawChunkIds(); // update the map chunk border colors to match the new rankings
     }
 
     // Move every ring back to the pool, sorted alphabetically by code, and save.
