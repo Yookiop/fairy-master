@@ -439,13 +439,14 @@ async function loadCombatAchievementsFromCSV() {
     const MIN_X = 1024;
     const MAX_Y = 4160;
     const X_CORRECTION = -6; // fine-tune: negative = shift left, positive = shift right
+    const FAIRY_RING_ICON_SHIFT_X = 27; // px, align our cyan icon ON TOP of the HD map's built-in travel icon (measured ~27px; keep in sync with index.html)
     const chunkGameX = MIN_X + col * TILE_SIZE;    // left edge of chunk in game coords
     const chunkGameY = MAX_Y - row * TILE_SIZE;     // top edge of chunk in game coords
     const fracX = (cfg.x + X_CORRECTION - chunkGameX) / TILE_SIZE; // 0..1 within chunk
     const fracY = (chunkGameY - cfg.y) / TILE_SIZE; // 0..1 within chunk
 
     const size = Math.min(chunkW, chunkH) * 0.135;
-    let offsetX = chunkX + fracX * chunkW - size / 2;
+    let offsetX = chunkX + fracX * chunkW - size / 2 + FAIRY_RING_ICON_SHIFT_X;
     let offsetY = chunkY + fracY * chunkH - size / 2;
     
     // Constrain within chunk boundaries

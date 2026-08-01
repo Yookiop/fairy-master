@@ -37,7 +37,7 @@
     </div>
   </div>
 
-  <script src="static/index.js?v=3"></script>
+  <script src="static/index.js?v=4"></script>
   <script>
     const stitched = document.getElementById('stitchedImg');
     const fullMap = document.getElementById('fullMap');
@@ -49,8 +49,14 @@
     let baseTileW = 256, baseTileH = 256;
     let minScale = 0.3, maxScale = 6;
 
-    const DEFAULT_GRID_NUDGE = { x: 0, y: -120 };
-    const DEFAULT_ROW_SCALE_PERCENT = 97;
+    // ===== HD world map calibration =====
+    // map_stitched.png is the HD map resized to 11776x7936 (46x31 chunks of 256px).
+    // The HD world is slightly compressed vs the standard grid. Fitted affine from
+    // sea-mask template matching: x_hd = 0.9584*x + 245.2 , y_hd = 0.9419*y + 231.2
+    // (full stitched px) -> columns scale 95.84%, rows 91.25%, plus a positive nudge.
+    const DEFAULT_GRID_NUDGE = { x: 245, y: 231 };
+    const DEFAULT_ROW_SCALE_PERCENT = 91.25;
+    const DEFAULT_COL_SCALE_PERCENT = 95.84;
     const DEFAULT_CENTER_ROW = 14; // startup center: chunk (14,33) — roughly Draynor / south coast
     const DEFAULT_CENTER_COL = 33;
     // Startup zoom: show roughly a 10x7 chunk band centered on the chunk above (like the pasted screenshot)
@@ -83,12 +89,23 @@
         try {
           const scale = DEFAULT_ROW_SCALE_PERCENT / 100.0;
           if (Math.abs(scale - 1.0) > 1e-6) {
-            const newHeights = gi.rowHeights.map(h => Math.max(1, Math.round(h * scale)));
+            const newHeights = gi.rowHeights.map(h => Math.max(1, h * scale));
             const firstTop = gi.rowTops[0] || 0;
             gi.rowHeights = newHeights;
             gi.rowTops = [];
             let acc = firstTop;
             for (let r = 0; r < newHeights.length; r++) { gi.rowTops.push(acc); acc += newHeights[r]; }
+          }
+        } catch(e) {}
+        try {
+          const colScale = DEFAULT_COL_SCALE_PERCENT / 100.0;
+          if (Math.abs(colScale - 1.0) > 1e-6) {
+            const newWidths = gi.colWidths.map(w => Math.max(1, w * colScale));
+            const firstLeft = gi.colLefts[0] || 0;
+            gi.colWidths = newWidths;
+            gi.colLefts = [];
+            let acc = firstLeft;
+            for (let c = 0; c < newWidths.length; c++) { gi.colLefts.push(acc); acc += newWidths[c]; }
           }
         } catch(e) {}
         try {
@@ -121,8 +138,8 @@
       
       const gridBottom = gi.rowTops[gi.rowTops.length - 1] + gi.rowHeights[gi.rowHeights.length - 1];
       
-      // Default chunk grid: black, slightly thicker than before
-      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      // Default chunk grid: dark gray (user asked gray borders instead of black, then dark gray), slightly thicker than before
+      ctx.strokeStyle = 'rgba(73,73,73,0.9)'; // 10% darker gray (81 -> 73)
       ctx.lineWidth = 3;
       // Row lines
       for (let r = 0; r <= manifest.rows; r++) {
@@ -136,7 +153,7 @@
       }
       // Green border around every chunk that contains a fairy ring (slightly thicker than the grid)
       ctx.strokeStyle = 'rgba(46,204,113,1)';
-      ctx.lineWidth = 4.95; // 10% thicker than the original 4.5
+      ctx.lineWidth = 5.9895; // another +10%: 5.445 -> 5.9895 (was 4.5 originally)
       for (const key of Object.keys(FAIRY_CHUNKS)) {
         const [r, c] = key.split(',').map(Number);
         if (r >= gi.rowTops.length || c >= gi.colLefts.length) continue;
@@ -157,7 +174,7 @@
           const y = gi.rowTops[r];
           const w = gi.colWidths[c];
           const h = gi.rowHeights[r];
-          ctx.fillStyle = 'rgba(0,0,0,0.495)'; // 10% darker than the original 0.45
+          ctx.fillStyle = 'rgba(0,0,0,0.599)'; // black overlay, 10% darker opacity (0.5445 -> 0.599)
           ctx.fillRect(x, y, w, h);
         }
       }
@@ -304,6 +321,7 @@
       const MIN_X = 1024;
       const MAX_Y = 4160;
       const X_CORRECTION = -6;
+      const FAIRY_RING_ICON_SHIFT_X = 27; // px, must match placeFairyRingMarker in static/index.js (HD map built-in travel icon alignment)
       // Exception chunk (fully unchanged behavior: centered label, no leader line)
       const EXCEPTION_CHUNKS = new Set(['10,32']);
       // Per-chunk label overrides:
@@ -313,7 +331,7 @@
       //  - offsetX/offsetY: extra pixel shift after close placement
       const DIRECTION_OVERRIDES = {
         '8,27': { dx: 1, dy: 1 },                // Kurask boss top-right -> label bottom-right of the ring
-        '7,6': { center: true },                 // DJR -> centered label + leader line
+        '7,6': { center: true },                 // DJR -> centered label + diagonal leader line to the box center
         '15,32': { leftCenter: true, offsetX: 20, offsetY: 25 }, // DIS -> left side, nudged a bit toward bottom-right
         '16,34': { leftCenter: true, offsetX: 20, offsetY: 25 }, // BIQ -> left-middle, nudged a bit toward bottom-right
         '17,21': { dx: 1, dy: -1, offsetX: -45 } // BKP -> shift left, clear of the Smoke Devil boss
@@ -363,10 +381,14 @@
 
         const isException = EXCEPTION_CHUNKS.has(key);
         if (!isException && anchorCount > 0) {
-          const iconX = anchorX / anchorCount;
-          const iconY = anchorY / anchorCount;
-          const fracX = (iconX - chunkX) / chunkW;
-          const fracY = (iconY - chunkY) / chunkH;
+          // Direction decision uses the UNSHIFTED ring position (unchanged behavior);
+          // the leader line + label box follow the shifted icon (matching placeFairyRingMarker).
+          const rawIconX = anchorX / anchorCount;
+          const rawIconY = anchorY / anchorCount;
+          const fracX = (rawIconX - chunkX) / chunkW;
+          const fracY = (rawIconY - chunkY) / chunkH;
+          const iconX = rawIconX + FAIRY_RING_ICON_SHIFT_X;
+          const iconY = rawIconY;
           const iconSize = Math.min(chunkW, chunkH) * 0.135; // matches placeFairyRingMarker
 
           const pad = Math.max(6, fontSize * 0.2);
@@ -375,6 +397,8 @@
             // Label centered in the chunk (the leader line is still drawn below)
             boxX = chunkX + (chunkW - boxW) / 2;
             boxY = chunkY + (chunkH - boxH) / 2;
+            boxX += (override.offsetX || 0);
+            boxY += (override.offsetY || 0);
           } else if (override && override.leftCenter) {
             // Label on the left side of the chunk, vertically centered
             boxX = chunkX + pad;
@@ -419,8 +443,14 @@
           // Thick black leader line from the icon to the label box (drawn under the box)
           const inside = iconX >= boxX && iconX <= boxX + boxW && iconY >= boxY && iconY <= boxY + boxH;
           if (!inside) {
-            const lineX = Math.max(boxX, Math.min(iconX, boxX + boxW));
-            const lineY = Math.max(boxY, Math.min(iconY, boxY + boxH));
+            // Centered labels (center branch) aim at the box CENTER so the line runs diagonal
+            // to the ring (e.g. DJR in chunk 7,6); otherwise aim at the nearest box edge.
+            const lineX = (override && override.center)
+              ? boxX + boxW / 2
+              : Math.max(boxX, Math.min(iconX, boxX + boxW));
+            const lineY = (override && override.center)
+              ? boxY + boxH / 2
+              : Math.max(boxY, Math.min(iconY, boxY + boxH));
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 6;
             ctx.lineCap = 'round';
@@ -554,7 +584,7 @@
 
     // Location names for the underground / instance rings (from the OSRS Wiki)
     const UNDERGROUND_LOCATIONS = {
-      'ALR': 'Abyssal Area',
+      'ALR': 'Abyssal area',
       'BKS': 'Zanaris',
       'BLP': 'TzHaar area',
       'DIP': 'Abyssal Nexus',
