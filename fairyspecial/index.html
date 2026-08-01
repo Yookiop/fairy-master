@@ -76,6 +76,7 @@
         <button id="alignZoomOutBtn" title="Zoom out" style="width:46px;height:40px;font-size:22px;font-weight:bold;border:none;border-radius:8px;background:rgba(255,255,255,0.08);color:#e8e8e8;cursor:pointer;">&minus;</button>
         <button id="alignZoomInBtn" title="Zoom in" style="width:46px;height:40px;font-size:22px;font-weight:bold;border:none;border-radius:8px;background:rgba(255,255,255,0.08);color:#e8e8e8;cursor:pointer;">+</button>
         <span id="alignZoomLabel" style="color:#999;font-size:14px;min-width:56px;text-align:center;font-family:system-ui,Segoe UI,Arial;">130%</span>
+        <button id="alignCenterBtn" title="Center the fairy ring in the image" style="height:40px;padding:0 12px;font-size:13px;font-weight:bold;border:none;border-radius:8px;background:rgba(74,158,255,0.25);color:#9fc6ff;cursor:pointer;">Center on ring</button>
       </div>
       <div id="alignViewport" style="width:100%; aspect-ratio:1/1; border:2px solid #4a9eff; border-radius:10px; overflow:hidden; background:#0a0a12; cursor:grab; touch-action:none;"></div>
     </div>
@@ -701,17 +702,25 @@
     const rankTierList = document.getElementById('rankTierList');
 
     // Manual per-chunk positioning (workaround for the normal-map chunk alignment).
-    // Each surface chunk can be positioned with BOTH zoom and pan. The align popup
-    // uses a CENTER-POINT model: (cx, cy) = which chunk fraction sits at the centre
-    // of the viewport; zoom = background-size multiplier. Wheel zooms AROUND THE
-    // CURSOR (point-and-zoom). Saved per code as { zoom, cx, cy }. Unadjusted
-    // chunks (or zoom<=1) render as center/cover.
+    // The surface tiles AND the align popup now use the FULL HD stitched map
+    // (static/map_stitched.png, MAP_W x MAP_H) as the background, so the map is
+    // CONTINUOUS: panning past a chunk edge shows the neighbouring chunks instead
+    // of black. State per ring = { mapX, mapY, viewW }: (mapX, mapY) is the
+    // stitched-map pixel at the centre of the view, viewW = how many stitched
+    // pixels the view shows across (256 = about one chunk).
     const ALIGN_OFFSETS_KEY = 'fairyspecial.rankings.offsets.v1';
-    const ALIGN_ZOOM_MIN = 1.0;
-    const ALIGN_ZOOM_MAX = 12.0;          // high enough to centre a corner region of the chunk
-    const ALIGN_ZOOM_STEP = 1.15;         // wheel step
-    const ALIGN_BUTTON_STEP = 1.5;        // + / - button step
-    const ALIGN_DEFAULT_ZOOM = 1.3;
+    const MAP_W = 11776;
+    const MAP_H = 7936;
+    const VIEW_DEFAULT = 256;     // ~one chunk across
+    const VIEW_MIN = 32;
+    const VIEW_MAX = 4096;
+    const VIEW_STEP = 1.15;       // wheel step
+    const VIEW_BUTTON_STEP = 1.5; // + / - button step
+    // Calibrated chunk geometry (matches setupCanvas): colLefts[c]=245.3504*c+245, rowTops[r]=233.6*r+231.
+    const CAL_COL_W = 245.3504;
+    const CAL_ROW_H = 233.6;
+    const CAL_NX = 245;
+    const CAL_NY = 231;
     let alignOffsets = loadAlignOffsets();
     let rankItemsByCode = {};
 
@@ -721,38 +730,46 @@
     function saveAlignOffsets() {
       try { localStorage.setItem(ALIGN_OFFSETS_KEY, JSON.stringify(alignOffsets)); } catch (e) {}
     }
-    // Clamp the centre point so the image (zoom x tile) always covers the tile.
-    function alignClampC(v, zoom) { const m = 1 / (2 * zoom); return Math.max(m, Math.min(1 - m, v)); }
-    // Normalise a saved offset; old {zoom, fx, fy} format -> {zoom, cx, cy}.
-    function normalizeAlignOffset(off) {
-      if (!off) return null;
-      const zoom = off.zoom || ALIGN_DEFAULT_ZOOM;
-      if (off.cx !== undefined) return { zoom, cx: off.cx, cy: off.cy };
-      return { zoom, cx: 0.5 - (off.fx || 0) / zoom, cy: 0.5 - (off.fy || 0) / zoom };
+    function parseChunkRowCol(chunkId) {
+      const p = String(chunkId).split('_');
+      return { row: parseInt(p[1], 10), col: parseInt(p[2], 10) };
+    }
+    // Keep the view inside the map so it always shows real map content.
+    function clampAlignView(mapX, mapY, viewW) {
+      const mx = Math.max(viewW / 2, Math.min(MAP_W - viewW / 2, mapX));
+      const my = Math.max(viewW / 2, Math.min(MAP_H - viewW / 2, mapY));
+      return [mx, my];
+    }
+    // Default / saved / legacy state for a surface ring -> { mapX, mapY, viewW }.
+    function normalizeAlignState(item, off) {
+      const rc = item ? parseChunkRowCol(item.chunkId) : null;
+      const chunkX = rc ? CAL_COL_W * rc.col + CAL_NX : MAP_W / 2;
+      const chunkY = rc ? CAL_ROW_H * rc.row + CAL_NY : MAP_H / 2;
+      if (off && off.mapX !== undefined) {
+        return { mapX: off.mapX, mapY: off.mapY, viewW: off.viewW || VIEW_DEFAULT };
+      }
+      if (off && off.zoom) { // legacy {zoom, cx, cy} chunk-fraction format
+        const cx = off.cx !== undefined ? off.cx : 0.5;
+        const cy = off.cy !== undefined ? off.cy : 0.5;
+        return { mapX: chunkX + cx * CAL_COL_W, mapY: chunkY + cy * CAL_ROW_H, viewW: VIEW_DEFAULT / Math.max(off.zoom, 0.1) };
+      }
+      return { mapX: chunkX + CAL_COL_W / 2, mapY: chunkY + CAL_ROW_H / 2, viewW: VIEW_DEFAULT };
     }
 
-    // Background CSS for a surface chunk image at (zoom, cx, cy). zoom<=1 => full chunk.
-    function alignBgCss(img, zoom, cx, cy) {
-      if (zoom <= 1.001) return '#0a0a12 url(' + img + ') center/cover no-repeat';
-      const px = Math.round((cx * zoom - 0.5) / (zoom - 1) * 10000) / 100;
-      const py = Math.round((cy * zoom - 0.5) / (zoom - 1) * 10000) / 100;
-      return '#0a0a12 url(' + img + ') ' + px + '% ' + py + '% / ' + (zoom * 100) + '% auto no-repeat';
+    // Background CSS using the full stitched map. Resolution independent: the
+    // position/size percentages are relative to the (square) tile/viewport.
+    function stitchedBgCss(mapX, mapY, viewW) {
+      const Px = Math.round(100 * (0.5 * viewW - mapX) / (viewW - MAP_W) * 100) / 100;
+      const Py = Math.round(100 * (0.5 * viewW - mapY) / (viewW - MAP_H) * 100) / 100;
+      const sx = Math.round(MAP_W / viewW * 10000) / 100;
+      const sy = Math.round(MAP_H / viewW * 10000) / 100;
+      return '#0a0a12 url(static/map_stitched.png) ' + Px + '% ' + Py + '% / ' + sx + '% ' + sy + '% no-repeat';
     }
 
     function rankTileBackground(item) {
       if (item.kind !== 'surface') return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
-      const off = normalizeAlignOffset(alignOffsets[item.code]);
-      if (!off || off.zoom <= 1.001) return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
-      return alignBgCss(item.img, off.zoom, off.cx, off.cy);
-    }
-
-    // Background style for a rank tile. Underground rings use center/cover;
-    // normal-map chunks use the saved (zoom, fx, fy) or the full chunk.
-    function rankTileBackground(item) {
-      if (item.kind !== 'surface') return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
-      const off = normalizeAlignOffset(alignOffsets[item.code]);
-      if (!off || off.zoom <= 1.001) return '#0a0a12 url(' + item.img + ') center/cover no-repeat';
-      return alignBgCss(item.img, off.zoom, off.cx, off.cy);
+      const s = normalizeAlignState(item, alignOffsets[item.code]);
+      return stitchedBgCss(s.mapX, s.mapY, s.viewW);
     }
 
     // Every rankable fairy ring. Surface rings use their chunk image;
@@ -760,7 +777,7 @@
     function buildRankItems() {
       const items = [];
       for (const [code, cfg] of Object.entries(FAIRY_RING_LOCATIONS)) {
-        items.push({ code, name: cfg.dest || code, img: 'static/chunks/' + cfg.chunkId + '.png', kind: 'surface' });
+        items.push({ code, name: cfg.dest || code, img: 'static/chunks/' + cfg.chunkId + '.png', kind: 'surface', chunkId: cfg.chunkId });
       }
       for (const code of UNDERGROUND_RINGS) {
         items.push({ code, name: UNDERGROUND_LOCATIONS[code] || code, img: 'static/underground/' + code + '.png', kind: 'underground' });
@@ -930,26 +947,46 @@
     const alignZoomInBtn = document.getElementById('alignZoomInBtn');
     const alignZoomOutBtn = document.getElementById('alignZoomOutBtn');
     const alignZoomLabel = document.getElementById('alignZoomLabel');
+    const alignCenterBtn = document.getElementById('alignCenterBtn');
     let alignCode = null;
-    let alignImg = '';
-    let alignState = { zoom: ALIGN_DEFAULT_ZOOM, cx: 0.5, cy: 0.5 };
+    let alignState = { mapX: MAP_W / 2, mapY: MAP_H / 2, viewW: VIEW_DEFAULT };
     let alignDirty = false;
-    let alignDragging = false, alignStartX = 0, alignStartY = 0, alignStartCx = 0, alignStartCy = 0;
+    let alignDragging = false, alignStartX = 0, alignStartY = 0, alignStartMapX = 0, alignStartMapY = 0;
 
     function renderAlignViewport() {
-      alignViewport.style.background = alignBgCss(alignImg, alignState.zoom, alignState.cx, alignState.cy);
+      alignViewport.style.background = stitchedBgCss(alignState.mapX, alignState.mapY, alignState.viewW);
     }
     function updateAlignZoomLabel() {
-      alignZoomLabel.textContent = Math.round(alignState.zoom * 100) + '%';
+      alignZoomLabel.textContent = Math.round(VIEW_DEFAULT / alignState.viewW * 100) + '%';
     }
-    // Zoom by `factor` keeping the image point under (focusX, focusY) fixed.
-    function applyAlignZoom(factor, focusX, focusY) {
+    // Centre the fairy ring in the view, keeping ~one chunk of continuous map around it.
+    function centerAlignOnRing() {
+      const item = rankItemsByCode[alignCode];
+      const loc = item && FAIRY_RING_LOCATIONS[item.code];
+      if (!loc || loc.x === undefined) return;
+      const TILE_SIZE = 64, MIN_X = 1024, MAX_Y = 4160, X_CORRECTION = -6;
+      const rc = parseChunkRowCol(loc.chunkId);
+      const chunkGameX = MIN_X + rc.col * TILE_SIZE;
+      const chunkGameY = MAX_Y - rc.row * TILE_SIZE;
+      const cx = (loc.x + X_CORRECTION - chunkGameX) / TILE_SIZE;
+      const cy = (chunkGameY - loc.y) / TILE_SIZE;
+      const mapX = CAL_COL_W * rc.col + CAL_NX + cx * CAL_COL_W;
+      const mapY = CAL_ROW_H * rc.row + CAL_NY + cy * CAL_ROW_H;
+      alignState.viewW = VIEW_DEFAULT;
+      [alignState.mapX, alignState.mapY] = clampAlignView(mapX, mapY, alignState.viewW);
+      alignDirty = true;
+      renderAlignViewport();
+      updateAlignZoomLabel();
+    }
+    // Zoom by `factor` keeping the stitched-map point under (focusX, focusY) fixed.
+    function applyAlignViewZoom(factor, focusX, focusY) {
       if (focusX === undefined) { focusX = 0.5; focusY = 0.5; }
-      const imgX = alignState.cx + (focusX - 0.5) / alignState.zoom;
-      const imgY = alignState.cy + (focusY - 0.5) / alignState.zoom;
-      alignState.zoom = Math.max(ALIGN_ZOOM_MIN, Math.min(ALIGN_ZOOM_MAX, alignState.zoom * factor));
-      alignState.cx = alignClampC(imgX - (focusX - 0.5) / alignState.zoom, alignState.zoom);
-      alignState.cy = alignClampC(imgY - (focusY - 0.5) / alignState.zoom, alignState.zoom);
+      const imgX = alignState.mapX + (focusX - 0.5) * alignState.viewW;
+      const imgY = alignState.mapY + (focusY - 0.5) * alignState.viewW;
+      alignState.viewW = Math.max(VIEW_MIN, Math.min(VIEW_MAX, alignState.viewW / factor));
+      alignState.mapX = imgX - (focusX - 0.5) * alignState.viewW;
+      alignState.mapY = imgY - (focusY - 0.5) * alignState.viewW;
+      [alignState.mapX, alignState.mapY] = clampAlignView(alignState.mapX, alignState.mapY, alignState.viewW);
       alignDirty = true;
       renderAlignViewport();
       updateAlignZoomLabel();
@@ -957,11 +994,9 @@
 
     function openAlignPopup(code, img, name) {
       alignCode = code;
-      alignImg = img;
-      const saved = normalizeAlignOffset(alignOffsets[code]);
-      alignState = saved
-        ? { zoom: saved.zoom, cx: alignClampC(saved.cx, saved.zoom), cy: alignClampC(saved.cy, saved.zoom) }
-        : { zoom: ALIGN_DEFAULT_ZOOM, cx: 0.5, cy: 0.5 };
+      const s = normalizeAlignState(rankItemsByCode[code], alignOffsets[code]);
+      alignState = { mapX: s.mapX, mapY: s.mapY, viewW: s.viewW };
+      [alignState.mapX, alignState.mapY] = clampAlignView(alignState.mapX, alignState.mapY, alignState.viewW);
       alignDirty = false;
       alignPopupTitle.textContent = 'Position ' + code + (name && name !== code ? ' - ' + name : '');
       renderAlignViewport();
@@ -973,7 +1008,7 @@
     function closeAlignPopup() {
       // Only save when the user actually zoomed or panned.
       if (alignCode && alignDirty) {
-        alignOffsets[alignCode] = { zoom: alignState.zoom, cx: alignState.cx, cy: alignState.cy };
+        alignOffsets[alignCode] = { mapX: alignState.mapX, mapY: alignState.mapY, viewW: alignState.viewW };
         saveAlignOffsets();
         // Apply the new position to the tile in the tier list
         const item = rankItemsByCode[alignCode];
@@ -987,15 +1022,17 @@
     alignViewport.addEventListener('mousedown', (e) => {
       alignDragging = true;
       alignStartX = e.clientX; alignStartY = e.clientY;
-      alignStartCx = alignState.cx; alignStartCy = alignState.cy;
+      alignStartMapX = alignState.mapX; alignStartMapY = alignState.mapY;
       alignViewport.style.cursor = 'grabbing';
       e.preventDefault();
     });
     window.addEventListener('mousemove', (e) => {
       if (!alignDragging) return;
       const rect = alignViewport.getBoundingClientRect();
-      alignState.cx = alignClampC(alignStartCx - (e.clientX - alignStartX) / (rect.width * alignState.zoom), alignState.zoom);
-      alignState.cy = alignClampC(alignStartCy - (e.clientY - alignStartY) / (rect.height * alignState.zoom), alignState.zoom);
+      const scale = alignState.viewW / rect.width; // stitched px per displayed px
+      alignState.mapX = alignStartMapX - (e.clientX - alignStartX) * scale;
+      alignState.mapY = alignStartMapY - (e.clientY - alignStartY) * scale;
+      [alignState.mapX, alignState.mapY] = clampAlignView(alignState.mapX, alignState.mapY, alignState.viewW);
       alignDirty = true;
       renderAlignViewport();
     });
@@ -1008,10 +1045,11 @@
       const rect = alignViewport.getBoundingClientRect();
       const fx = (e.clientX - rect.left) / rect.width;
       const fy = (e.clientY - rect.top) / rect.height;
-      applyAlignZoom(e.deltaY < 0 ? ALIGN_ZOOM_STEP : 1 / ALIGN_ZOOM_STEP, fx, fy);
+      applyAlignViewZoom(e.deltaY < 0 ? VIEW_STEP : 1 / VIEW_STEP, fx, fy);
     }, { passive: false });
-    alignZoomInBtn.addEventListener('click', () => applyAlignZoom(ALIGN_BUTTON_STEP));
-    alignZoomOutBtn.addEventListener('click', () => applyAlignZoom(1 / ALIGN_BUTTON_STEP));
+    alignZoomInBtn.addEventListener('click', () => applyAlignViewZoom(VIEW_BUTTON_STEP));
+    alignZoomOutBtn.addEventListener('click', () => applyAlignViewZoom(1 / VIEW_BUTTON_STEP));
+    alignCenterBtn.addEventListener('click', () => centerAlignOnRing());
     alignPopupClose.addEventListener('click', () => closeAlignPopup());
     alignPopup.addEventListener('click', (e) => { if (e.target === alignPopup) closeAlignPopup(); });
     window.addEventListener('keydown', (e) => {
