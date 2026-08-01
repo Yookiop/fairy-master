@@ -136,7 +136,7 @@
       }
       // Green border around every chunk that contains a fairy ring (slightly thicker than the grid)
       ctx.strokeStyle = 'rgba(46,204,113,1)';
-      ctx.lineWidth = 4.5;
+      ctx.lineWidth = 4.95; // 10% thicker than the original 4.5
       for (const key of Object.keys(FAIRY_CHUNKS)) {
         const [r, c] = key.split(',').map(Number);
         if (r >= gi.rowTops.length || c >= gi.colLefts.length) continue;
@@ -157,7 +157,7 @@
           const y = gi.rowTops[r];
           const w = gi.colWidths[c];
           const h = gi.rowHeights[r];
-          ctx.fillStyle = 'rgba(0,0,0,0.45)';
+          ctx.fillStyle = 'rgba(0,0,0,0.495)'; // 10% darker than the original 0.45
           ctx.fillRect(x, y, w, h);
         }
       }
