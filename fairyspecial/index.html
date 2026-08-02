@@ -47,9 +47,9 @@
       <img id="stitchedImg" src="static/map_stitched.png" alt="Full map" draggable="false" style="display:block; image-rendering:auto;" />
       <canvas id="gridCanvas" style="position:absolute; left:0; top:0; pointer-events:none;"></canvas>
     </div>
-    <div id="zoomControls" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:row; gap:0; z-index:100000; align-items:center;">
-      <button id="zoomOutBtn" title="Zoom out" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-right:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">&minus;</button>
-      <button id="zoomInBtn" title="Zoom in" style="width:48px;height:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-left:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">+</button>
+    <div id="zoomControls" style="position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:row; gap:0; z-index:100000; align-items:stretch;">
+      <button id="zoomOutBtn" title="Zoom out" style="width:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-right:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">&minus;</button>
+      <button id="zoomInBtn" title="Zoom in" style="width:48px;font-size:26px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-left:0;border-radius:8px;background:rgba(30,30,30,0.85);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;">+</button>
       <button id="rankBtn" title="Fairy ring tier list" style="height:auto;padding:7px 14px;border:2px solid rgba(255,255,255,0.45);border-radius:8px;margin-left:32px;margin-right:32px;background:rgba(30,30,30,0.85);color:#e8e8e8;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">
         <span style="font-size:18px;font-weight:bold;">Open tier list</span>
         <span style="display:flex;gap:4px;">
@@ -61,7 +61,7 @@
           <span class="rank-legend-box" data-tier="F">F</span>
         </span>
       </button>
-      <button id="undergroundBtn" style="height:48px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#00e5ff;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background 0.15s;white-space:nowrap;">Show underground/instance fairy rings</button>
+      <button id="undergroundBtn" style="width:155px;padding:0 16px;font-size:18px;font-weight:bold;border:2px solid rgba(255,255,255,0.45);border-radius:8px;background:rgba(30,30,30,0.85);color:#00e5ff;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center;backdrop-filter:blur(4px);transition:background 0.15s;">Show hidden fairy rings</button>
     </div>
     <!-- Chunk-identify info button, top-right corner, separate from the toolbar -->
     <button id="identifyBtn" title="Toggle chunk IDs. Click a chunk ID to make it the map's centre when opening." style="position:fixed; top:10px; right:10px; width:34px; height:34px; z-index:100000; border:2px solid rgba(255,255,255,0.45); border-radius:50%; background:rgba(30,30,30,0.85); color:#e8e8e8; font-size:17px; font-weight:bold; font-style:italic; font-family:Georgia,serif; cursor:pointer; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px); transition:background 0.15s;">i</button>
@@ -71,7 +71,7 @@
   <div id="undergroundPopup" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:100001; align-items:center; justify-content:center;">
     <div style="background:#151528; border:1px solid #4a9eff; border-radius:12px; padding:18px 20px; max-width:740px; width:92%; max-height:92vh; overflow-y:auto; position:relative; box-shadow:0 12px 50px rgba(0,0,0,0.7);">
       <button id="undergroundPopupClose" title="Close" style="position:absolute; top:10px; right:12px; width:36px; height:36px; font-size:18px; font-weight:bold; border:none; border-radius:8px; background:rgba(255,255,255,0.08); color:#ccc; cursor:pointer;">✕</button>
-      <h2 style="margin:0 0 14px; color:#e8e8e8; font-size:32px; font-weight:bold; text-align:center; font-family:system-ui,Segoe UI,Arial;">Underground / Instance fairy rings</h2>
+      <h2 style="margin:0 0 14px; color:#e8e8e8; font-size:32px; font-weight:bold; text-align:center; font-family:system-ui,Segoe UI,Arial;">Underground &amp; Instance fairy rings</h2>
       <div id="undergroundPopupGrid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:10px;"></div>
     </div>
   </div>
@@ -137,13 +137,12 @@
     // instead of fitting the entire map on screen.
     const START_SPAN_COLS = 10;
     const START_SPAN_ROWS = 7;
-    const UNDERGROUND_PAD = 0; // underground row removed — replaced by the popup button
 
     function setupCanvas() {
       if (!stitched || !stitched.naturalWidth) return;
       if (!manifest || !Array.isArray(manifest.chunks) || manifest.chunks.length === 0) return;
-      try { canvas.width = stitched.naturalWidth; canvas.height = stitched.naturalHeight + UNDERGROUND_PAD; } catch(e) {}
-      try { canvas.style.width = stitched.naturalWidth + 'px'; canvas.style.height = (stitched.naturalHeight + UNDERGROUND_PAD) + 'px'; } catch(e) {}
+      try { canvas.width = stitched.naturalWidth; canvas.height = stitched.naturalHeight; } catch(e) {}
+      try { canvas.style.width = stitched.naturalWidth + 'px'; canvas.style.height = stitched.naturalHeight + 'px'; } catch(e) {}
       try { const first = manifest.chunks[0]; if (first) { baseTileW = first.bbox[2] - first.bbox[0]; baseTileH = first.bbox[3] - first.bbox[1]; } } catch(e) {}
       try { if (stitched) { stitched.style.display = 'block'; stitched.style.opacity = '1'; } } catch(e) {}
 
@@ -294,126 +293,10 @@
       }
     }
 
-    // Underground row with proper boxes and Fairy Hideout
+    // Underground / instance fairy rings (used by the underground popup and the tier list)
     const UNDERGROUND_RINGS = [
       'ALR','BKS','BLP','DIP','DLP','AJQ','BJR','BKQ','CKP','DIQ','DIR','DLS','BLQ'
     ];
-
-    function drawUndergroundRow(ctx, gi) {
-      if (!gi || !manifest) return;
-      const cols = manifest.cols;
-      const colW = gi.colLefts.length > 0 ? gi.colWidths[0] : baseTileW;
-      const chunkH = gi.rowHeights.length > 0 ? gi.rowHeights[0] : baseTileH;
-      const gridBottom = gi.rowTops[gi.rowTops.length - 1] + gi.rowHeights[gi.rowHeights.length - 1];
-      const sepY = gridBottom + 4;
-      const titleGap = 55; // space between title and boxes (~5cm on screen)
-      const topY = sepY + 24 + titleGap;
-      const boxH = chunkH;
-      
-      // Background
-      ctx.fillStyle = '#1a1a2e';
-      ctx.fillRect(0, sepY - 2, canvas.width, UNDERGROUND_PAD);
-      
-      // Gray separator bar
-      ctx.fillStyle = '#555';
-      ctx.fillRect(0, sepY, canvas.width, 3);
-      
-      // Title
-      ctx.fillStyle = '#ccc';
-      ctx.font = 'bold 24px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillText('Underground / Instance fairy rings', 10, sepY + 20);
-      
-      const allRings = UNDERGROUND_RINGS.map(code => ({ type: 'ring', code, color: '#4a9eff' }));
-      // Fairy Hideout is first box
-      const bw = colW - 6;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      
-      // === Fairy Hideout (first box) ===
-      {
-        const cx = gi.colLefts[0] + gi.colWidths[0] / 2;
-        const bx = cx - bw/2;
-        const by = topY;
-        
-        ctx.fillStyle = '#111';
-        roundRect(ctx, bx, by, bw, boxH, 6);
-        ctx.fill();
-        ctx.strokeStyle = '#4a9eff';
-        ctx.lineWidth = 2;
-        roundRect(ctx, bx, by, bw, boxH, 6);
-        ctx.stroke();
-        
-        // 4 codes stacked vertically with clear down arrows (solid triangles)
-        const codes = ['AIR','DLR','DJQ','AJS'];
-        // Fit all 4 codes + 3 arrows inside the box by capping font size on BOTH width and height
-        const lineFactor = 1.15;     // vertical step per code line
-        const arrowSlotFactor = 0.5; // vertical slot reserved per arrow
-        const maxFontByHeight = boxH / (codes.length * lineFactor + (codes.length - 1) * arrowSlotFactor);
-        const fontSize = Math.max(11, Math.min(bw * 0.22, maxFontByHeight * 0.94));
-        ctx.font = `bold ${fontSize}px Arial`;
-        const lineH = fontSize * lineFactor;
-        const arrowSlot = fontSize * arrowSlotFactor;
-        const totalH = codes.length * lineH + (codes.length - 1) * arrowSlot;
-        let cy = by + (boxH - totalH) / 2 + lineH / 2;
-        
-        ctx.fillStyle = '#00e5ff';
-        for (let j = 0; j < codes.length; j++) {
-          ctx.fillText(codes[j], cx, cy);
-          if (j < codes.length - 1) {
-            // Solid downward triangle, centered in the slot between two codes
-            const triH = fontSize * 0.32;
-            const triW = fontSize * 0.52;
-            const triY = cy + (lineH + arrowSlot) / 2;
-            ctx.fillStyle = '#4a9eff';
-            ctx.beginPath();
-            ctx.moveTo(cx, triY + triH / 2);
-            ctx.lineTo(cx - triW / 2, triY - triH / 2);
-            ctx.lineTo(cx + triW / 2, triY - triH / 2);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = '#00e5ff';
-          }
-          cy += lineH + arrowSlot;
-        }
-      }
-      
-      // === Underground rings (starting from col 1) ===
-      for (let i = 0; i < allRings.length && i + 1 < cols; i++) {
-        const item = allRings[i];
-        const col = i + 1; // start from column 1
-        const cx = gi.colLefts[col] + gi.colWidths[col] / 2;
-        const bx = cx - bw/2;
-        const by = topY;
-        
-        ctx.fillStyle = '#111';
-        roundRect(ctx, bx, by, bw, boxH, 6);
-        ctx.fill();
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = 1.5;
-        roundRect(ctx, bx, by, bw, boxH, 6);
-        ctx.stroke();
-        
-        const fontSize = Math.max(14, bw * 0.28);
-        ctx.fillStyle = '#00e5ff';
-        ctx.font = `bold ${fontSize}px Arial`;
-        ctx.fillText(item.code, cx, by + boxH * 0.5);
-      }
-    }
-    
-    function roundRect(ctx, x, y, w, h, r) {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-      ctx.lineTo(x + w, y + h - r);
-      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-      ctx.lineTo(x + r, y + h);
-      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-      ctx.lineTo(x, y + r);
-      ctx.quadraticCurveTo(x, y, x + r, y);
-      ctx.closePath();
-    }
 
     // Fairy ring chunk labels (black box, text color follows the tier/border color, visible at any zoom)
     const FAIRY_CHUNKS = {
@@ -440,10 +323,11 @@
       //  - {dx, dy}: direction from ring to label (close placement)
       //  - {center: true}: label centered in the chunk, but keep the leader line
       //  - {leftCenter: true}: label on the left side of the chunk, vertically centered
+      //  - {bottomCenter: true}: label centered horizontally at the bottom of the chunk
       //  - offsetX/offsetY: extra pixel shift after close placement
       const DIRECTION_OVERRIDES = {
         '8,27': { dx: 1, dy: 1 },                // Kurask boss top-right -> label bottom-right of the ring
-        '7,6': { center: true },                 // DJR -> centered label + diagonal leader line to the box center
+        '7,6': { bottomCenter: true, offsetX: -30 }, // DJR -> label at the bottom, shifted LEFT so the black leader line to the ring icon is visible; keeps the Chasm of Fire cave entrance / map text clear
         '10,32': { center: true },               // DKR -> centered label + leader line to the box center
         '15,32': { leftCenter: true, offsetX: 20, offsetY: 25 }, // DIS -> left side, nudged a bit toward bottom-right
         '16,34': { leftCenter: true, offsetX: 45, offsetY: 45 }, // BIQ -> left-middle, nudged toward bottom-right (closer to the ring)
@@ -517,6 +401,12 @@
             boxY = chunkY + (chunkH - boxH) / 2;
             boxX += (override.offsetX || 0);
             boxY += (override.offsetY || 0);
+          } else if (override && override.bottomCenter) {
+            // Label centered horizontally at the bottom of the chunk
+            boxX = chunkX + (chunkW - boxW) / 2;
+            boxY = chunkY + chunkH - boxH - pad;
+            boxX += (override.offsetX || 0);
+            boxY += (override.offsetY || 0);
           } else {
             // Direction from the ring toward the label (opposite side, but close to the ring).
             let dx, dy;
@@ -556,7 +446,7 @@
           const inside = iconX >= boxX && iconX <= boxX + boxW && iconY >= boxY && iconY <= boxY + boxH;
           if (!inside) {
             // Centered labels (center branch) aim at the box CENTER so the line runs diagonal
-            // to the ring (e.g. DJR in chunk 7,6); otherwise aim at the nearest box edge.
+            // to the ring (e.g. DKR in chunk 10,32); otherwise aim at the nearest box edge.
             const lineX = (override && override.center)
               ? boxX + boxW / 2
               : Math.max(boxX, Math.min(iconX, boxX + boxW));
