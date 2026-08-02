@@ -326,6 +326,7 @@
       //  - {bottomCenter: true}: label centered horizontally at the bottom of the chunk
       //  - offsetX/offsetY: extra pixel shift after close placement
       const DIRECTION_OVERRIDES = {
+        '4,9': { dx: 0, dy: 1, offsetX: -75 },   // CIS -> label shifted LEFT (vertical stays), so the black leader line to the ring icon is visible
         '8,27': { dx: 1, dy: 1 },                // Kurask boss top-right -> label bottom-right of the ring
         '7,6': { bottomCenter: true, offsetX: -30 }, // DJR -> label at the bottom, shifted LEFT so the black leader line to the ring icon is visible; keeps the Chasm of Fire cave entrance / map text clear
         '10,32': { center: true },               // DKR -> centered label + leader line to the box center
